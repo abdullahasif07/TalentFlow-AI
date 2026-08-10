@@ -1,0 +1,169 @@
+from tortoise import BaseDBAsyncClient
+
+RUN_IN_TRANSACTION = True
+
+
+async def upgrade(db: BaseDBAsyncClient) -> str:
+    return """
+        CREATE TABLE IF NOT EXISTS "candidates" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "name" VARCHAR(255) NOT NULL,
+    "email" VARCHAR(320) NOT NULL UNIQUE,
+    "phone" VARCHAR(50),
+    "linkedin_url" VARCHAR(500),
+    "github_url" VARCHAR(500),
+    "portfolio_url" VARCHAR(500)
+);
+CREATE TABLE IF NOT EXISTS "companies" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "name" VARCHAR(255) NOT NULL UNIQUE,
+    "description" TEXT,
+    "website" VARCHAR(500)
+);
+CREATE TABLE IF NOT EXISTS "jobs" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "title" VARCHAR(255) NOT NULL,
+    "description" TEXT NOT NULL,
+    "required_skills" JSONB NOT NULL,
+    "preferred_skills" JSONB NOT NULL,
+    "experience_requirement" VARCHAR(255),
+    "evaluation_criteria" JSONB NOT NULL,
+    "status" VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    "company_id" INT NOT NULL REFERENCES "companies" ("id") ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "idx_jobs_company_8982a3" ON "jobs" ("company_id", "status");
+COMMENT ON COLUMN "jobs"."status" IS 'DRAFT: DRAFT\nOPEN: OPEN\nCLOSED: CLOSED';
+CREATE TABLE IF NOT EXISTS "applications" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "resume_url" VARCHAR(1000),
+    "cover_letter" TEXT,
+    "status" VARCHAR(30) NOT NULL DEFAULT 'APPLIED',
+    "fit_score" DECIMAL(5,2),
+    "applied_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "candidate_id" INT NOT NULL REFERENCES "candidates" ("id") ON DELETE CASCADE,
+    "job_id" INT NOT NULL REFERENCES "jobs" ("id") ON DELETE CASCADE,
+    CONSTRAINT "uid_application_candida_b12862" UNIQUE ("candidate_id", "job_id")
+);
+CREATE INDEX IF NOT EXISTS "idx_application_job_id_a33f08" ON "applications" ("job_id", "status");
+COMMENT ON COLUMN "applications"."status" IS 'APPLIED: APPLIED\nAI_REVIEWED: AI_REVIEWED\nHUMAN_REVIEW: HUMAN_REVIEW\nSHORTLISTED: SHORTLISTED\nCONTACTED: CONTACTED\nREPLIED: REPLIED\nINTERVIEW: INTERVIEW\nOFFER: OFFER\nHIRED: HIRED\nREJECTED: REJECTED';
+CREATE TABLE IF NOT EXISTS "ai_evaluations" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "overall_score" DECIMAL(5,2) NOT NULL,
+    "recommendation" TEXT NOT NULL,
+    "confidence" VARCHAR(20) NOT NULL,
+    "strengths" JSONB NOT NULL,
+    "gaps" JSONB NOT NULL,
+    "evidence" JSONB NOT NULL,
+    "analysis_json" JSONB NOT NULL,
+    "application_id" INT NOT NULL UNIQUE REFERENCES "applications" ("id") ON DELETE CASCADE
+);
+COMMENT ON COLUMN "ai_evaluations"."confidence" IS 'LOW: LOW\nMEDIUM: MEDIUM\nHIGH: HIGH';
+CREATE TABLE IF NOT EXISTS "application_status_history" (
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "previous_status" VARCHAR(30) NOT NULL,
+    "new_status" VARCHAR(30) NOT NULL,
+    "changed_by" VARCHAR(320) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "application_id" INT NOT NULL REFERENCES "applications" ("id") ON DELETE CASCADE
+);
+COMMENT ON COLUMN "application_status_history"."previous_status" IS 'APPLIED: APPLIED\nAI_REVIEWED: AI_REVIEWED\nHUMAN_REVIEW: HUMAN_REVIEW\nSHORTLISTED: SHORTLISTED\nCONTACTED: CONTACTED\nREPLIED: REPLIED\nINTERVIEW: INTERVIEW\nOFFER: OFFER\nHIRED: HIRED\nREJECTED: REJECTED';
+COMMENT ON COLUMN "application_status_history"."new_status" IS 'APPLIED: APPLIED\nAI_REVIEWED: AI_REVIEWED\nHUMAN_REVIEW: HUMAN_REVIEW\nSHORTLISTED: SHORTLISTED\nCONTACTED: CONTACTED\nREPLIED: REPLIED\nINTERVIEW: INTERVIEW\nOFFER: OFFER\nHIRED: HIRED\nREJECTED: REJECTED';
+CREATE TABLE IF NOT EXISTS "outreach_emails" (
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "subject" VARCHAR(500) NOT NULL,
+    "body" TEXT NOT NULL,
+    "status" VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+    "generated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "approved_at" TIMESTAMPTZ,
+    "sent_at" TIMESTAMPTZ,
+    "application_id" INT NOT NULL REFERENCES "applications" ("id") ON DELETE CASCADE
+);
+COMMENT ON COLUMN "outreach_emails"."status" IS 'DRAFT: DRAFT\nAPPROVED: APPROVED\nSENT: SENT';
+CREATE TABLE IF NOT EXISTS "recruiters" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "name" VARCHAR(255) NOT NULL,
+    "email" VARCHAR(320) NOT NULL UNIQUE,
+    "role" VARCHAR(100) NOT NULL,
+    "company_id" INT NOT NULL REFERENCES "companies" ("id") ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS "resumes" (
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "file_url" VARCHAR(1000) NOT NULL,
+    "raw_text" TEXT,
+    "parsed_data" JSONB NOT NULL,
+    "candidate_id" INT NOT NULL UNIQUE REFERENCES "candidates" ("id") ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS "aerich" (
+    "id" SERIAL NOT NULL PRIMARY KEY,
+    "version" VARCHAR(255) NOT NULL,
+    "app" VARCHAR(100) NOT NULL,
+    "content" JSONB NOT NULL
+);"""
+
+
+async def downgrade(db: BaseDBAsyncClient) -> str:
+    return """
+        """
+
+
+MODELS_STATE = (
+    "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"
+)
