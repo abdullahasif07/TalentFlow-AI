@@ -1,0 +1,9 @@
+[tool.aerich]
+tortoise_orm = "app.config.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "./."
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
