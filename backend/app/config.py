@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgres://postgres:postgres@localhost:5432/talentflow_ai"
     app_env: str = "development"
+    upload_root: Path = BACKEND_DIR / "uploads"
+    max_resume_size_bytes: int = 10 * 1024 * 1024
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
@@ -38,4 +40,3 @@ TORTOISE_ORM = {
     "use_tz": True,
     "timezone": "UTC",
 }
-

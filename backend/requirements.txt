@@ -4,4 +4,6 @@ strawberry-graphql[fastapi]>=0.260,<1.0
 tortoise-orm[asyncpg]>=0.24,<1.0
 aerich>=0.8,<1.0
 pydantic-settings>=2.7,<3.0
+email-validator>=2.2,<3.0
+python-multipart>=0.0.20,<1.0
 tomli>=2.0; python_version < "3.11"

@@ -13,7 +13,7 @@ class ApplicationStatusHistory(models.Model):
     application: fields.ForeignKeyRelation["Application"] = fields.ForeignKeyField(
         "models.Application", related_name="status_history", on_delete=fields.CASCADE
     )
-    previous_status = fields.CharEnumField(ApplicationStatus, max_length=30)
+    previous_status = fields.CharEnumField(ApplicationStatus, max_length=30, null=True)
     new_status = fields.CharEnumField(ApplicationStatus, max_length=30)
     changed_by = fields.CharField(max_length=320)
     created_at = fields.DatetimeField(auto_now_add=True)
@@ -21,4 +21,3 @@ class ApplicationStatusHistory(models.Model):
     class Meta:
         table = "application_status_history"
         ordering = ["-created_at"]
-
