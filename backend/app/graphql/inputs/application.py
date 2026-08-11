@@ -35,4 +35,3 @@ class UpdateApplicationStatusInput:
     application_id: strawberry.ID
     status: ApplicationStatus
     changed_by: str
-

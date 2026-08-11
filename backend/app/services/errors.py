@@ -32,4 +32,3 @@ class InvalidResumeTypeError(ApplicationSubmissionError):
 
 class ResumeTooLargeError(ApplicationSubmissionError):
     pass
-

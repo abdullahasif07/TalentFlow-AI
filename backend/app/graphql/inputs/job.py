@@ -27,4 +27,3 @@ class CreateJobInput:
     experience_requirement: str | None = None
     evaluation_criteria: JSON | None = None
     status: JobStatus = JobStatus.DRAFT
-

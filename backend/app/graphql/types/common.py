@@ -27,4 +27,3 @@ def operation_error(
     field: str | None = None,
 ) -> OperationError:
     return OperationError(code=code, message=message, field=field)
-
