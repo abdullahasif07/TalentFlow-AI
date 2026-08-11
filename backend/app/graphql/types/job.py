@@ -8,6 +8,7 @@ from strawberry.scalars import JSON
 
 from app.db.models import Job
 from app.enums import JobStatus
+from app.graphql.types.common import OperationError
 
 
 @strawberry.type
@@ -50,3 +51,25 @@ class JobType:
             created_at=job.created_at,
             updated_at=job.updated_at,
         )
+
+
+@strawberry.type
+class JobsResult:
+    success: bool
+    items: list[JobType]
+    total_count: int
+    errors: list[OperationError]
+
+
+@strawberry.type
+class JobResult:
+    success: bool
+    job: JobType | None
+    errors: list[OperationError]
+
+
+@strawberry.type
+class CreateJobPayload:
+    success: bool
+    job: JobType | None
+    errors: list[OperationError]

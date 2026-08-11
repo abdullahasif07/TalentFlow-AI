@@ -7,6 +7,7 @@ import strawberry
 
 from app.db.models import Application
 from app.enums import ApplicationStatus
+from app.graphql.types.common import OperationError
 from app.graphql.types.job import JobSummary
 
 
@@ -50,3 +51,32 @@ class ApplicationType:
             applied_at=application.applied_at,
             updated_at=application.updated_at,
         )
+
+
+@strawberry.type
+class ApplicationsResult:
+    success: bool
+    items: list[ApplicationType]
+    total_count: int
+    errors: list[OperationError]
+
+
+@strawberry.type
+class ApplicationResult:
+    success: bool
+    application: ApplicationType | None
+    errors: list[OperationError]
+
+
+@strawberry.type
+class SubmitApplicationPayload:
+    success: bool
+    application: ApplicationType | None
+    errors: list[OperationError]
+
+
+@strawberry.type
+class UpdateApplicationStatusPayload:
+    success: bool
+    application: ApplicationType | None
+    errors: list[OperationError]

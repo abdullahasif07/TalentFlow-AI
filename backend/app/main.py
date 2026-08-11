@@ -25,7 +25,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-app.include_router(GraphQLRouter(schema), prefix="/graphql")
+app.include_router(
+    GraphQLRouter(schema, multipart_uploads_enabled=True),
+    prefix="/graphql",
+)
 
 
 @app.get("/health", tags=["system"])
