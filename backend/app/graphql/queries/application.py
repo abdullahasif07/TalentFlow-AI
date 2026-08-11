@@ -4,15 +4,18 @@ import logging
 
 import strawberry
 
-from app.db.models import Application, Job
 from app.graphql.inputs import ApplicationQueryInput, ApplicationsQueryInput
 from app.graphql.types import (
+    ApplicationDetailType,
+    ApplicationListItemType,
     ApplicationResult,
     ApplicationsResult,
-    ApplicationType,
+    OffsetPageInfo,
     OperationErrorCode,
     operation_error,
 )
+from app.services import RecruiterApplicationQueryService
+from app.services.errors import InvalidApplicationInformationError, JobNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,7 @@ class ApplicationQuery:
                 success=False,
                 items=[],
                 total_count=0,
+                page_info=None,
                 errors=[
                     operation_error(
                         OperationErrorCode.VALIDATION_ERROR,
@@ -38,30 +42,61 @@ class ApplicationQuery:
                 ],
             )
 
+        pagination = input.pagination
+        filters = input.filters
         try:
-            if not await Job.exists(id=job_id):
-                return ApplicationsResult(
-                    success=False,
-                    items=[],
-                    total_count=0,
-                    errors=[
-                        operation_error(
-                            OperationErrorCode.NOT_FOUND,
-                            "Job not found.",
-                            "jobId",
-                        )
-                    ],
+            page = await RecruiterApplicationQueryService.list_for_job(
+                job_id=job_id,
+                status=filters.status if filters and filters.status else input.status,
+                minimum_fit_score=filters.minimum_fit_score if filters else None,
+                candidate_search=filters.candidate_search if filters else None,
+                sort=input.sort,
+                limit=pagination.limit if pagination else 25,
+                offset=pagination.offset if pagination else 0,
+            )
+            items = [
+                ApplicationListItemType.from_models(
+                    record.application,
+                    record.resume,
+                    record.evaluation,
                 )
-            query = Application.filter(job_id=job_id)
-            if input.status is not None:
-                query = query.filter(status=input.status)
-            records = await query.select_related("candidate", "job").order_by("-applied_at")
-            items = [ApplicationType.from_model(record) for record in records]
+                for record in page.records
+            ]
             return ApplicationsResult(
                 success=True,
                 items=items,
-                total_count=len(items),
+                total_count=page.total_count,
+                page_info=OffsetPageInfo(
+                    limit=page.limit,
+                    offset=page.offset,
+                    has_next_page=page.offset + len(items) < page.total_count,
+                    has_previous_page=page.offset > 0,
+                ),
                 errors=[],
+            )
+        except JobNotFoundError as exc:
+            return ApplicationsResult(
+                success=False,
+                items=[],
+                total_count=0,
+                page_info=None,
+                errors=[
+                    operation_error(OperationErrorCode.NOT_FOUND, str(exc), "jobId")
+                ],
+            )
+        except InvalidApplicationInformationError as exc:
+            return ApplicationsResult(
+                success=False,
+                items=[],
+                total_count=0,
+                page_info=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.VALIDATION_ERROR,
+                        str(exc),
+                        "input",
+                    )
+                ],
             )
         except Exception:
             logger.exception("Unable to query applications for job %s", job_id)
@@ -69,6 +104,7 @@ class ApplicationQuery:
                 success=False,
                 items=[],
                 total_count=0,
+                page_info=None,
                 errors=[
                     operation_error(
                         OperationErrorCode.INTERNAL_ERROR,
@@ -95,9 +131,7 @@ class ApplicationQuery:
             )
 
         try:
-            record = await Application.get_or_none(id=application_id).select_related(
-                "candidate", "job"
-            )
+            record = await RecruiterApplicationQueryService.get_detail(application_id)
         except Exception:
             logger.exception("Unable to query application %s", application_id)
             return ApplicationResult(
@@ -124,6 +158,12 @@ class ApplicationQuery:
             )
         return ApplicationResult(
             success=True,
-            application=ApplicationType.from_model(record),
+            application=ApplicationDetailType.from_models(
+                record.application,
+                record.resume,
+                record.evaluation,
+                record.status_history,
+                record.outreach_emails,
+            ),
             errors=[],
         )

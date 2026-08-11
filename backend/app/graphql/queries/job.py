@@ -13,6 +13,7 @@ from app.graphql.types import (
     OperationErrorCode,
     operation_error,
 )
+from app.services import RecruiterJobQueryService
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class JobQuery:
             if input and input.status is not None:
                 query = query.filter(status=input.status)
 
+            query = RecruiterJobQueryService.with_statistics(query)
             records = await query.order_by("-created_at")
             items = [JobType.from_model(record) for record in records]
             return JobsResult(success=True, items=items, total_count=len(items), errors=[])
@@ -79,7 +81,8 @@ class JobQuery:
             )
 
         try:
-            record = await Job.get_or_none(id=job_id)
+            query = RecruiterJobQueryService.with_statistics(Job.filter(id=job_id))
+            record = await query.first()
         except Exception:
             logger.exception("Unable to query job %s", job_id)
             return JobResult(

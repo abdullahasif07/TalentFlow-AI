@@ -1,15 +1,28 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import strawberry
 from strawberry.file_uploads import Upload
 
-from app.enums import ApplicationStatus
+from app.enums import ApplicationSort, ApplicationStatus
+from app.graphql.inputs.common import OffsetPaginationInput
+
+
+@strawberry.input
+class ApplicationFiltersInput:
+    status: ApplicationStatus | None = None
+    minimum_fit_score: Decimal | None = None
+    candidate_search: str | None = None
 
 
 @strawberry.input
 class ApplicationsQueryInput:
     job_id: strawberry.ID
     status: ApplicationStatus | None = None
+    filters: ApplicationFiltersInput | None = None
+    sort: ApplicationSort = ApplicationSort.NEWEST
+    pagination: OffsetPaginationInput | None = None
 
 
 @strawberry.input

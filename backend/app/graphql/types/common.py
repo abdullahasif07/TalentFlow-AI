@@ -21,6 +21,14 @@ class OperationError:
     field: str | None = None
 
 
+@strawberry.type
+class OffsetPageInfo:
+    limit: int
+    offset: int
+    has_next_page: bool
+    has_previous_page: bool
+
+
 def operation_error(
     code: OperationErrorCode,
     message: str,
