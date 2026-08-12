@@ -227,6 +227,10 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             "submitApplication(input: SubmitApplicationInput!): SubmitApplicationPayload!",
             "updateApplicationStatus(input: UpdateApplicationStatusInput!): "
             "UpdateApplicationStatusPayload!",
+            "bulkUpdateApplicationStatus(input: BulkUpdateApplicationStatusInput!): "
+            "BulkUpdateApplicationStatusPayload!",
+            "addApplicationNote(input: AddApplicationNoteInput!): "
+            "AddApplicationNotePayload!",
         )
         for contract in expected:
             self.assertIn(contract, schema_text)

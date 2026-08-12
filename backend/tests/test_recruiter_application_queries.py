@@ -213,6 +213,21 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
             ["Casey Morgan"],
         )
 
+    async def test_applications_are_scoped_to_the_requested_job(self) -> None:
+        first_job = await self.query_applications({"jobId": str(self.job.id)})
+        other_job = await self.query_applications({"jobId": str(self.other_job.id)})
+
+        self.assertEqual(first_job["totalCount"], 6)
+        self.assertNotIn(
+            "Other Job Applicant",
+            {item["candidate"]["name"] for item in first_job["items"]},
+        )
+        self.assertEqual(other_job["totalCount"], 1)
+        self.assertEqual(
+            other_job["items"][0]["candidate"]["name"],
+            "Other Job Applicant",
+        )
+
     async def test_sorting_and_pagination(self) -> None:
         newest = await self.query_applications({"jobId": str(self.job.id)})
         self.assertEqual(newest["items"][0]["candidate"]["name"], "Frank Woods")

@@ -53,6 +53,15 @@ cd backend
 
 7. Open the Strawberry GraphQL IDE at <http://localhost:8000/graphql>.
 
+## Day 2 backend capabilities
+
+- Public application submission with candidate reuse and duplicate-job protection
+- Local PDF resume validation and storage with a replaceable storage service
+- Recruiter applicant filtering, sorting, pagination, and detailed application views
+- Audited individual and bulk pipeline status updates
+- Recruiter notes kept separate from AI evaluation data
+- No AI parsing, scoring, background workers, authentication, or frontend workflow yet
+
 ## Example operations
 
 ```graphql
@@ -74,12 +83,62 @@ query Job {
 }
 
 query Applications {
-  applications(input: { jobId: "1" }) {
+  applications(input: {
+    jobId: "1"
+    filters: {
+      status: SHORTLISTED
+      minimumFitScore: 70
+      candidateSearch: "jordan"
+    }
+    sort: FIT_SCORE_DESC
+    pagination: { limit: 25, offset: 0 }
+  }) {
     success
     totalCount
+    pageInfo { limit offset hasNextPage hasPreviousPage }
     items {
-      id status fitScore
-      candidate { name email }
+      id
+      status
+      fitScore
+      appliedAt
+      candidate {
+        id name email phone linkedinUrl githubUrl portfolioUrl
+      }
+      resume { id fileUrl }
+      evaluation { overallScore recommendation confidence }
+    }
+    errors { code message field }
+  }
+}
+
+query ApplicationDetail {
+  application(input: { id: "1" }) {
+    success
+    application {
+      id status fitScore coverLetter appliedAt updatedAt
+      candidate { id name email phone linkedinUrl githubUrl portfolioUrl }
+      job { id companyId title description status }
+      resume { id fileUrl }
+      evaluation { overallScore recommendation confidence }
+      statusHistory { previousStatus newStatus changedBy createdAt }
+      notes { id content recruiter { id name email } createdAt updatedAt }
+      outreachEmails { subject body status generatedAt approvedAt sentAt }
+    }
+    errors { code message field }
+  }
+}
+
+query JobStatistics {
+  job(input: { id: "1" }) {
+    success
+    job {
+      id title
+      applicantCount
+      shortlistedCount
+      contactedCount
+      interviewCount
+      hiredCount
+      recommendedCandidateCount
     }
     errors { code message field }
   }
@@ -105,9 +164,36 @@ mutation UpdateApplicationStatus {
     applicationId: "1"
     status: SHORTLISTED
     changedBy: "maya.patel@northstar.example.com"
+    recruiterId: "1"
   }) {
     success
     application { id status updatedAt }
+    errors { code message field }
+  }
+}
+
+mutation AddApplicationNote {
+  addApplicationNote(input: {
+    applicationId: "1"
+    recruiterId: "1"
+    content: "Strong communication during the initial screen."
+  }) {
+    success
+    note { id content recruiter { id name email } createdAt }
+    errors { code message field }
+  }
+}
+
+mutation BulkUpdateApplicationStatus {
+  bulkUpdateApplicationStatus(input: {
+    applicationIds: ["1", "2", "3"]
+    status: INTERVIEW
+    changedBy: "maya.patel@northstar.example.com"
+    recruiterId: "1"
+  }) {
+    success
+    applications { id status }
+    failures { applicationId errors { code message field } }
     errors { code message field }
   }
 }
@@ -116,7 +202,14 @@ mutation UpdateApplicationStatus {
 All operations use named input objects and typed result payloads. Expected errors are returned in
 the payload as `OperationError` values with a stable `code`, readable `message`, and optional
 `field`. Transport-level GraphQL errors are reserved for malformed documents and invalid scalar
-shapes.
+shapes. Applicant lists default to newest first and 25 records per page, allow at most 100 records
+per request, and always include total and offset pagination metadata. Applications without fit
+scores remain queryable and are placed last when sorting by fit score.
+
+Pipeline status changes are audited in chronological `statusHistory`. Repeating the current status
+does not add another history entry. Human updates are intentionally flexible; callers should set
+`automated: true` only for system-driven transitions, which use stricter transition rules. Bulk
+updates may partially succeed, so clients should inspect both `applications` and `failures`.
 
 ## Submit an application with a resume
 
