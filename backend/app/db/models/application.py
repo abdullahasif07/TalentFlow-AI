@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from tortoise.fields.relational import ReverseRelation
 
     from app.db.models.ai_evaluation import AIEvaluation
+    from app.db.models.application_note import ApplicationNote
     from app.db.models.candidate import Candidate
     from app.db.models.job import Job
     from app.db.models.outreach_email import OutreachEmail
@@ -34,9 +35,12 @@ class Application(TimestampedModel):
     ai_evaluation: fields.ReverseRelation["AIEvaluation"]
     status_history: "ReverseRelation[ApplicationStatusHistory]"
     outreach_emails: "ReverseRelation[OutreachEmail]"
+    notes: "ReverseRelation[ApplicationNote]"
 
     class Meta:
         table = "applications"
         unique_together = (("candidate", "job"),)
-        indexes = (("job_id", "status"),)
-
+        indexes = (
+            ("job_id", "status"),
+            ("job_id", "applied_at"),
+        )

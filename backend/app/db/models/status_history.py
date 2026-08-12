@@ -20,4 +20,5 @@ class ApplicationStatusHistory(models.Model):
 
     class Meta:
         table = "application_status_history"
-        ordering = ["-created_at"]
+        ordering = ["created_at", "id"]
+        indexes = (("application_id", "created_at"),)

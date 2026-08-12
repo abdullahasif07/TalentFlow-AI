@@ -41,7 +41,7 @@ class CandidateService:
     @staticmethod
     async def find_by_email(email: str) -> Candidate | None:
         normalized_email = email.strip().casefold()
-        return await Candidate.filter(email__iexact=normalized_email).first()
+        return await Candidate.filter(email=normalized_email).first()
 
     @staticmethod
     def validate(
@@ -78,34 +78,32 @@ class CandidateService:
         connection: BaseDBAsyncClient,
     ) -> Candidate:
         normalized_email = str(data.email).strip().casefold()
-        candidate = (
-            await Candidate.filter(email__iexact=normalized_email)
-            .using_db(connection)
-            .first()
-        )
-        if candidate is not None:
-            updates: list[str] = []
-            optional_values = {
+        candidate, created = await Candidate.get_or_create(
+            email=normalized_email,
+            defaults={
+                "name": data.full_name,
                 "phone": data.phone,
                 "linkedin_url": str(data.linkedin_url) if data.linkedin_url else None,
                 "github_url": str(data.github_url) if data.github_url else None,
                 "portfolio_url": str(data.portfolio_url) if data.portfolio_url else None,
-            }
-            for field_name, value in optional_values.items():
-                if value and not getattr(candidate, field_name):
-                    setattr(candidate, field_name, value)
-                    updates.append(field_name)
-            if updates:
-                updates.append("updated_at")
-                await candidate.save(using_db=connection, update_fields=updates)
-            return candidate
-
-        return await Candidate.create(
-            name=data.full_name,
-            email=normalized_email,
-            phone=data.phone,
-            linkedin_url=str(data.linkedin_url) if data.linkedin_url else None,
-            github_url=str(data.github_url) if data.github_url else None,
-            portfolio_url=str(data.portfolio_url) if data.portfolio_url else None,
+            },
             using_db=connection,
         )
+        if created:
+            return candidate
+
+        updates: list[str] = []
+        optional_values = {
+            "phone": data.phone,
+            "linkedin_url": str(data.linkedin_url) if data.linkedin_url else None,
+            "github_url": str(data.github_url) if data.github_url else None,
+            "portfolio_url": str(data.portfolio_url) if data.portfolio_url else None,
+        }
+        for field_name, value in optional_values.items():
+            if value and not getattr(candidate, field_name):
+                setattr(candidate, field_name, value)
+                updates.append(field_name)
+        if updates:
+            updates.append("updated_at")
+            await candidate.save(using_db=connection, update_fields=updates)
+        return candidate
