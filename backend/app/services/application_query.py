@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -10,6 +11,7 @@ from tortoise.queryset import QuerySet
 from app.db.models import (
     AIEvaluation,
     Application,
+    ApplicationNote,
     ApplicationStatusHistory,
     Job,
     OutreachEmail,
@@ -40,6 +42,7 @@ class ApplicationDetailRecord:
     resume: Resume | None
     evaluation: AIEvaluation | None
     status_history: list[ApplicationStatusHistory]
+    notes: list[ApplicationNote]
     outreach_emails: list[OutreachEmail]
 
 
@@ -114,19 +117,25 @@ class RecruiterApplicationQueryService:
         if application is None:
             return None
 
-        resume = await Resume.get_or_none(candidate_id=application.candidate_id)
-        evaluation = await AIEvaluation.get_or_none(application_id=application.id)
-        status_history = await ApplicationStatusHistory.filter(
-            application_id=application.id
-        ).order_by("-created_at")
-        outreach_emails = await OutreachEmail.filter(
-            application_id=application.id
-        ).order_by("-generated_at")
+        resume, evaluation, status_history, notes, outreach_emails = await asyncio.gather(
+            Resume.get_or_none(candidate_id=application.candidate_id),
+            AIEvaluation.get_or_none(application_id=application.id),
+            ApplicationStatusHistory.filter(application_id=application.id).order_by(
+                "created_at", "id"
+            ),
+            ApplicationNote.filter(application_id=application.id)
+            .select_related("recruiter")
+            .order_by("created_at", "id"),
+            OutreachEmail.filter(application_id=application.id).order_by(
+                "-generated_at"
+            ),
+        )
         return ApplicationDetailRecord(
             application=application,
             resume=resume,
             evaluation=evaluation,
             status_history=status_history,
+            notes=notes,
             outreach_emails=outreach_emails,
         )
 

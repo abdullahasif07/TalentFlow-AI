@@ -48,3 +48,21 @@ class UpdateApplicationStatusInput:
     application_id: strawberry.ID
     status: ApplicationStatus
     changed_by: str
+    recruiter_id: strawberry.ID | None = None
+    automated: bool = False
+
+
+@strawberry.input
+class BulkUpdateApplicationStatusInput:
+    application_ids: list[strawberry.ID]
+    status: ApplicationStatus
+    changed_by: str
+    recruiter_id: strawberry.ID | None = None
+    automated: bool = False
+
+
+@strawberry.input
+class AddApplicationNoteInput:
+    application_id: strawberry.ID
+    content: str
+    recruiter_id: strawberry.ID | None = None

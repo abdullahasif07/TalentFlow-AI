@@ -163,6 +163,7 @@ class ApplicationQuery:
                 record.resume,
                 record.evaluation,
                 record.status_history,
+                record.notes,
                 record.outreach_emails,
             ),
             errors=[],

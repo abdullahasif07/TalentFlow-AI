@@ -8,11 +8,13 @@ import strawberry
 from app.db.models import (
     AIEvaluation,
     Application,
+    ApplicationNote,
     ApplicationStatusHistory,
     Candidate,
     Job,
     OutreachEmail,
     Resume,
+    Recruiter,
 )
 from app.enums import (
     ApplicationStatus,
@@ -29,6 +31,21 @@ class CandidateSummary:
     id: strawberry.ID
     name: str
     email: str
+
+
+@strawberry.type
+class RecruiterSummary:
+    id: strawberry.ID
+    name: str
+    email: str
+
+    @classmethod
+    def from_model(cls, recruiter: Recruiter) -> "RecruiterSummary":
+        return cls(
+            id=strawberry.ID(str(recruiter.id)),
+            name=recruiter.name,
+            email=recruiter.email,
+        )
 
 
 @strawberry.type
@@ -121,6 +138,26 @@ class ApplicationStatusHistoryType:
             new_status=history.new_status,
             changed_by=history.changed_by,
             created_at=history.created_at,
+        )
+
+
+@strawberry.type
+class ApplicationNoteType:
+    id: strawberry.ID
+    content: str
+    recruiter: RecruiterSummary | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, note: ApplicationNote) -> "ApplicationNoteType":
+        recruiter = note.recruiter if note.recruiter_id is not None else None
+        return cls(
+            id=strawberry.ID(str(note.id)),
+            content=note.content,
+            recruiter=RecruiterSummary.from_model(recruiter) if recruiter else None,
+            created_at=note.created_at,
+            updated_at=note.updated_at,
         )
 
 
@@ -244,6 +281,7 @@ class ApplicationDetailType:
     resume: ResumeType | None
     evaluation: EvaluationType | None
     status_history: list[ApplicationStatusHistoryType]
+    notes: list[ApplicationNoteType]
     outreach_emails: list[OutreachEmailType]
 
     @classmethod
@@ -253,6 +291,7 @@ class ApplicationDetailType:
         resume: Resume | None,
         evaluation: AIEvaluation | None,
         status_history: list[ApplicationStatusHistory],
+        notes: list[ApplicationNote],
         outreach_emails: list[OutreachEmail],
     ) -> "ApplicationDetailType":
         return cls(
@@ -278,6 +317,7 @@ class ApplicationDetailType:
             status_history=[
                 ApplicationStatusHistoryType.from_model(item) for item in status_history
             ],
+            notes=[ApplicationNoteType.from_model(item) for item in notes],
             outreach_emails=[OutreachEmailType.from_model(item) for item in outreach_emails],
         )
 
@@ -309,4 +349,25 @@ class SubmitApplicationPayload:
 class UpdateApplicationStatusPayload:
     success: bool
     application: ApplicationType | None
+    errors: list[OperationError]
+
+
+@strawberry.type
+class ApplicationStatusUpdateFailure:
+    application_id: strawberry.ID
+    errors: list[OperationError]
+
+
+@strawberry.type
+class BulkUpdateApplicationStatusPayload:
+    success: bool
+    applications: list[ApplicationType]
+    failures: list[ApplicationStatusUpdateFailure]
+    errors: list[OperationError]
+
+
+@strawberry.type
+class AddApplicationNotePayload:
+    success: bool
+    note: ApplicationNoteType | None
     errors: list[OperationError]
