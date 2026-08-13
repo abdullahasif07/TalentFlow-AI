@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     upload_root: Path = BACKEND_DIR / "uploads"
     max_resume_size_bytes: int = 10 * 1024 * 1024
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4.1-mini"
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
