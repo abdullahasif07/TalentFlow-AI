@@ -5,6 +5,7 @@ import json
 from pydantic import ValidationError
 
 from app.db.models import Job
+from app.enums import AIProcessingState
 from app.schemas import JobEvaluationCriteria
 from app.services.ai.client import (
     LLMClientError,
@@ -100,5 +101,12 @@ class JobCriteriaService:
 
         criteria = await self.generate(job)
         job.evaluation_criteria = criteria.model_dump(mode="json")
-        await job.save(update_fields=["evaluation_criteria", "updated_at"])
+        job.criteria_processing_state = AIProcessingState.COMPLETED
+        await job.save(
+            update_fields=[
+                "evaluation_criteria",
+                "criteria_processing_state",
+                "updated_at",
+            ]
+        )
         return criteria

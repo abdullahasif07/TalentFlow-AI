@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import ValidationError
 
 from app.db.models import Resume
+from app.enums import AIProcessingState
 from app.schemas import ParsedResume
 from app.services.ai.client import (
     LLMClientError,
@@ -92,5 +93,8 @@ class ResumeParsingService:
 
         parsed_resume = await self.parse(resume.raw_text)
         resume.parsed_data = parsed_resume.model_dump(mode="json")
-        await resume.save(update_fields=["parsed_data", "updated_at"])
+        resume.processing_state = AIProcessingState.COMPLETED
+        await resume.save(
+            update_fields=["parsed_data", "processing_state", "updated_at"]
+        )
         return parsed_resume
