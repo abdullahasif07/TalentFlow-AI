@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from tortoise import fields
 
 from app.db.models.base import TimestampedModel
+from app.enums import AIProcessingState
 
 if TYPE_CHECKING:
     from app.db.models.candidate import Candidate
@@ -18,6 +19,11 @@ class Resume(TimestampedModel):
     file_url = fields.CharField(max_length=1000)
     raw_text = fields.TextField(null=True)
     parsed_data: dict[str, Any] | list[Any] = fields.JSONField(default=dict)
+    processing_state = fields.CharEnumField(
+        AIProcessingState,
+        default=AIProcessingState.NOT_STARTED,
+        max_length=20,
+    )
 
     class Meta:
         table = "resumes"

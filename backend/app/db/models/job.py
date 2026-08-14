@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from tortoise import fields
 
 from app.db.models.base import TimestampedModel
-from app.enums import JobStatus
+from app.enums import AIProcessingState, JobStatus
 
 if TYPE_CHECKING:
     from tortoise.fields.relational import ReverseRelation
@@ -25,6 +25,11 @@ class Job(TimestampedModel):
     preferred_skills: dict[str, Any] | list[Any] = fields.JSONField(default=list)
     experience_requirement = fields.CharField(max_length=255, null=True)
     evaluation_criteria: dict[str, Any] | list[Any] = fields.JSONField(default=dict)
+    criteria_processing_state = fields.CharEnumField(
+        AIProcessingState,
+        default=AIProcessingState.NOT_STARTED,
+        max_length=20,
+    )
     status = fields.CharEnumField(JobStatus, default=JobStatus.DRAFT, max_length=20)
 
     applications: "ReverseRelation[Application]"

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from tortoise import fields
 
 from app.db.models.base import TimestampedModel
-from app.enums import ApplicationStatus
+from app.enums import AIProcessingState, ApplicationStatus
 
 if TYPE_CHECKING:
     from tortoise.fields.relational import ReverseRelation
@@ -30,6 +30,11 @@ class Application(TimestampedModel):
         ApplicationStatus, default=ApplicationStatus.APPLIED, max_length=30
     )
     fit_score = fields.DecimalField(max_digits=5, decimal_places=2, null=True)
+    evaluation_processing_state = fields.CharEnumField(
+        AIProcessingState,
+        default=AIProcessingState.NOT_STARTED,
+        max_length=20,
+    )
     applied_at = fields.DatetimeField(auto_now_add=True)
 
     ai_evaluation: fields.ReverseRelation["AIEvaluation"]
