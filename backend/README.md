@@ -22,6 +22,8 @@ cd backend
 
    Update `DATABASE_URL` if your PostgreSQL username, password, host, or port differs.
    `UPLOAD_ROOT` controls local file storage and `MAX_RESUME_SIZE_BYTES` defaults to 10 MB.
+   `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` default to separate Redis databases on
+   `localhost:6379`.
 
 3. Create a virtual environment and install dependencies:
 
@@ -53,14 +55,120 @@ cd backend
 
 7. Open the Strawberry GraphQL IDE at <http://localhost:8000/graphql>.
 
-## Day 2 backend capabilities
+## Background AI worker
+
+Start the included Redis service from the project root and verify it is healthy:
+
+```bash
+docker compose up -d redis
+docker compose exec redis redis-cli ping
+```
+
+The second command should print `PONG`. Then start a Celery worker from `backend/` with the
+virtual environment active:
+
+```bash
+celery -A app.worker.celery_app:celery_app worker --loglevel=INFO
+```
+
+In another terminal, confirm that the worker responds:
+
+```bash
+celery -A app.worker.celery_app:celery_app inspect ping
+```
+
+Tasks are deliberately separate so failures can be retried independently. They may be enqueued
+through GraphQL or directly from Python:
+
+```python
+from app.worker.tasks import (
+    evaluate_application,
+    generate_job_criteria,
+    process_resume,
+)
+
+resume_result = process_resume.delay(application_id=1)
+criteria_result = generate_job_criteria.delay(job_id=1)
+evaluation_result = evaluate_application.delay(application_id=1)
+```
+
+`process_resume` extracts and persists PDF text, then parses and persists structured resume data.
+`generate_job_criteria` creates and persists the job rubric. `evaluate_application` requires both
+structured inputs, upserts the application's single AI evaluation, and updates `fit_score` without
+changing pipeline status. Run resume and criteria processing before evaluation.
+
+Worker tasks use a fresh async event loop and Tortoise connection lifecycle for each execution.
+Temporary database or AI-provider failures use bounded exponential retries. Missing records,
+invalid PDFs, absent prerequisite data, and invalid structured output fail without being retried.
+
+## AI processing GraphQL operations
+
+The trigger mutations validate prerequisites, enqueue Celery work, and return immediately. They
+never wait for the AI provider:
+
+```graphql
+mutation TriggerAIProcessing {
+  generateJobCriteria(input: { jobId: "1" }) {
+    success accepted resourceId state message taskId
+    errors { code message field }
+  }
+  processApplicationResume(input: { applicationId: "1" }) {
+    success accepted resourceId state message taskId
+    errors { code message field }
+  }
+  generateCandidateEvaluation(input: { applicationId: "1" }) {
+    success accepted resourceId state message taskId
+    errors { code message field }
+  }
+}
+```
+
+Queue every eligible, unevaluated applicant for one job with:
+
+```graphql
+mutation ScreenApplicants {
+  screenJobApplicants(input: { jobId: "1" }) {
+    success accepted state queuedCount applicationIds failedApplicationIds message
+    errors { code message field }
+  }
+}
+```
+
+Read the current recommendations without triggering AI work:
+
+```graphql
+query RecommendedCandidates {
+  recommendedCandidates(input: { jobId: "1", limit: 5 }) {
+    success totalCount limit
+    items {
+      candidate { id name email }
+      application { id status fitScore evaluationProcessingState appliedAt }
+      evaluation {
+        overallScore recommendation confidence processingState
+        strengths { summary evidence }
+        gaps { summary evidence }
+        evidence { claim resumeEvidence category }
+        categoryScores { name score weight weightedScore rationale evidence }
+      }
+    }
+    errors { code message field }
+  }
+}
+```
+
+Jobs expose `criteriaProcessingState`, resumes expose `processingState`, and applications expose
+`evaluationProcessingState`. Each uses `NOT_STARTED`, `PROCESSING`, `COMPLETED`, or `FAILED`.
+
+## Backend capabilities
 
 - Public application submission with candidate reuse and duplicate-job protection
 - Local PDF resume validation and storage with a replaceable storage service
 - Recruiter applicant filtering, sorting, pagination, and detailed application views
 - Audited individual and bulk pipeline status updates
 - Recruiter notes kept separate from AI evaluation data
-- No AI parsing, scoring, background workers, authentication, or frontend workflow yet
+- PDF text extraction, structured resume parsing, job rubrics, and evidence-based candidate scoring
+- Redis-backed Celery tasks for independent resume, criteria, and evaluation processing
+- No automatic ranking, authentication, or frontend workflow yet
 
 ## Example operations
 

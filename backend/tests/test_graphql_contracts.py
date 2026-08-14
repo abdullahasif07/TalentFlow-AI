@@ -223,6 +223,8 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             "job(input: JobQueryInput!): JobResult!",
             "applications(input: ApplicationsQueryInput!): ApplicationsResult!",
             "application(input: ApplicationQueryInput!): ApplicationResult!",
+            "recommendedCandidates(input: RecommendedCandidatesInput!): "
+            "RecommendedCandidatesResult!",
             "createJob(input: CreateJobInput!): CreateJobPayload!",
             "submitApplication(input: SubmitApplicationInput!): SubmitApplicationPayload!",
             "updateApplicationStatus(input: UpdateApplicationStatusInput!): "
@@ -231,6 +233,14 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             "BulkUpdateApplicationStatusPayload!",
             "addApplicationNote(input: AddApplicationNoteInput!): "
             "AddApplicationNotePayload!",
+            "generateJobCriteria(input: GenerateJobCriteriaInput!): "
+            "AIProcessingPayload!",
+            "processApplicationResume(input: ProcessApplicationResumeInput!): "
+            "AIProcessingPayload!",
+            "generateCandidateEvaluation(input: GenerateCandidateEvaluationInput!): "
+            "AIProcessingPayload!",
+            "screenJobApplicants(input: ScreenJobApplicantsInput!): "
+            "BatchScreeningPayload!",
         )
         for contract in expected:
             self.assertIn(contract, schema_text)

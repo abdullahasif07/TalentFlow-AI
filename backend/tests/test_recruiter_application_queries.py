@@ -17,6 +17,7 @@ from app.db.models import (
     Resume,
 )
 from app.enums import (
+    AIProcessingState,
     ApplicationSort,
     ApplicationStatus,
     EvaluationConfidence,
@@ -112,6 +113,10 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
             recommendation="Strong match",
             confidence=EvaluationConfidence.HIGH,
         )
+        await Application.filter(id=self.bob.id).update(
+            evaluation_processing_state=AIProcessingState.COMPLETED
+        )
+        self.bob.evaluation_processing_state = AIProcessingState.COMPLETED
         await ApplicationStatusHistory.create(
             application=self.bob,
             previous_status=None,
@@ -336,7 +341,7 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
                 "contactedCount": 1,
                 "interviewCount": 1,
                 "hiredCount": 1,
-                "recommendedCandidateCount": 0,
+                "recommendedCandidateCount": 1,
             },
         )
 
