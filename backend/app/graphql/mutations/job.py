@@ -5,6 +5,7 @@ import logging
 import strawberry
 
 from app.db.models import Company, Job
+from app.enums import AIProcessingState
 from app.graphql.inputs import CreateJobInput
 from app.graphql.types import (
     CreateJobPayload,
@@ -84,6 +85,11 @@ class JobMutation:
                 preferred_skills=input.preferred_skills,
                 experience_requirement=input.experience_requirement,
                 evaluation_criteria=input.evaluation_criteria or {},
+                criteria_processing_state=(
+                    AIProcessingState.COMPLETED
+                    if input.evaluation_criteria
+                    else AIProcessingState.NOT_STARTED
+                ),
                 status=input.status,
             )
         except Exception:

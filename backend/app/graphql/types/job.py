@@ -7,7 +7,7 @@ import strawberry
 from strawberry.scalars import JSON
 
 from app.db.models import Job
-from app.enums import JobStatus
+from app.enums import AIProcessingState, JobStatus
 from app.graphql.types.common import OperationError
 
 
@@ -16,10 +16,16 @@ class JobSummary:
     id: strawberry.ID
     title: str
     status: JobStatus
+    criteria_processing_state: AIProcessingState
 
     @classmethod
     def from_model(cls, job: Job) -> "JobSummary":
-        return cls(id=strawberry.ID(str(job.id)), title=job.title, status=job.status)
+        return cls(
+            id=strawberry.ID(str(job.id)),
+            title=job.title,
+            status=job.status,
+            criteria_processing_state=job.criteria_processing_state,
+        )
 
 
 @strawberry.type
@@ -32,6 +38,7 @@ class JobType:
     preferred_skills: JSON
     experience_requirement: str | None
     evaluation_criteria: JSON
+    criteria_processing_state: AIProcessingState
     status: JobStatus
     applicant_count: int
     shortlisted_count: int
@@ -53,13 +60,16 @@ class JobType:
             preferred_skills=job.preferred_skills,
             experience_requirement=job.experience_requirement,
             evaluation_criteria=job.evaluation_criteria,
+            criteria_processing_state=job.criteria_processing_state,
             status=job.status,
             applicant_count=getattr(job, "applicant_count", 0),
             shortlisted_count=getattr(job, "shortlisted_count", 0),
             contacted_count=getattr(job, "contacted_count", 0),
             interview_count=getattr(job, "interview_count", 0),
             hired_count=getattr(job, "hired_count", 0),
-            recommended_candidate_count=0,
+            recommended_candidate_count=getattr(
+                job, "recommended_candidate_count", 0
+            ),
             created_at=job.created_at,
             updated_at=job.updated_at,
         )

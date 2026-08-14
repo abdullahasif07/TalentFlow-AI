@@ -17,7 +17,7 @@ from app.db.models import (
     OutreachEmail,
     Resume,
 )
-from app.enums import ApplicationSort, ApplicationStatus
+from app.enums import AIProcessingState, ApplicationSort, ApplicationStatus
 from app.services.errors import InvalidApplicationInformationError, JobNotFoundError
 
 
@@ -46,9 +46,24 @@ class ApplicationDetailRecord:
     outreach_emails: list[OutreachEmail]
 
 
+@dataclass(frozen=True)
+class RecommendedCandidateRecord:
+    application: Application
+    evaluation: AIEvaluation
+
+
+@dataclass(frozen=True)
+class RecommendedCandidatePage:
+    records: list[RecommendedCandidateRecord]
+    total_count: int
+    limit: int
+
+
 class RecruiterApplicationQueryService:
     default_limit = 25
     maximum_limit = 100
+    default_recommended_limit = 5
+    maximum_recommended_limit = 50
 
     @classmethod
     async def list_for_job(
@@ -138,6 +153,49 @@ class RecruiterApplicationQueryService:
             notes=notes,
             outreach_emails=outreach_emails,
         )
+
+    @classmethod
+    async def list_recommended_for_job(
+        cls,
+        *,
+        job_id: int,
+        limit: int = default_recommended_limit,
+    ) -> RecommendedCandidatePage:
+        if limit < 1 or limit > cls.maximum_recommended_limit:
+            raise InvalidApplicationInformationError(
+                f"Recommended candidate limit must be between 1 and "
+                f"{cls.maximum_recommended_limit}."
+            )
+        if not await Job.exists(id=job_id):
+            raise JobNotFoundError("Job not found.")
+
+        query = AIEvaluation.filter(
+            application__job_id=job_id,
+            application__fit_score__not_isnull=True,
+            application__evaluation_processing_state=AIProcessingState.COMPLETED,
+        )
+        total_count = await query.count()
+        evaluations = await (
+            query.select_related(
+                "application",
+                "application__candidate",
+                "application__job",
+            )
+            .order_by(
+                "-application__fit_score",
+                "-application__applied_at",
+                "-application_id",
+            )
+            .limit(limit)
+        )
+        records = [
+            RecommendedCandidateRecord(
+                application=evaluation.application,
+                evaluation=evaluation,
+            )
+            for evaluation in evaluations
+        ]
+        return RecommendedCandidatePage(records, total_count, limit)
 
     @classmethod
     def _validate_options(

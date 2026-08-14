@@ -17,6 +17,7 @@ from app.db.models import (
     Recruiter,
 )
 from app.enums import (
+    AIProcessingState,
     ApplicationStatus,
     EvaluationConfidence,
     JobStatus,
@@ -75,6 +76,7 @@ class CandidateDetails:
 class ResumeType:
     id: strawberry.ID
     file_url: str
+    processing_state: AIProcessingState
 
     @classmethod
     def from_model(
@@ -83,22 +85,137 @@ class ResumeType:
         return cls(
             id=strawberry.ID(str(resume.id)),
             file_url=application_file_url or resume.file_url,
+            processing_state=resume.processing_state,
         )
 
 
 @strawberry.type
+class EvaluationFindingType:
+    summary: str
+    evidence: list[str]
+
+
+@strawberry.type
+class EvaluationEvidenceType:
+    claim: str
+    resume_evidence: str
+    category: str | None
+
+
+@strawberry.type
+class EvaluationCategoryScoreType:
+    name: str
+    score: Decimal
+    weight: int
+    weighted_score: Decimal
+    rationale: str
+    evidence: list[str]
+
+
+@strawberry.type
 class EvaluationType:
+    id: strawberry.ID
     overall_score: Decimal
     recommendation: str
     confidence: EvaluationConfidence
+    strengths: list[EvaluationFindingType]
+    gaps: list[EvaluationFindingType]
+    evidence: list[EvaluationEvidenceType]
+    category_scores: list[EvaluationCategoryScoreType]
+    processing_state: AIProcessingState
 
     @classmethod
     def from_model(cls, evaluation: AIEvaluation) -> "EvaluationType":
+        analysis = (
+            evaluation.analysis_json
+            if isinstance(evaluation.analysis_json, dict)
+            else {}
+        )
         return cls(
+            id=strawberry.ID(str(evaluation.id)),
             overall_score=evaluation.overall_score,
             recommendation=evaluation.recommendation,
             confidence=evaluation.confidence,
+            strengths=cls._findings(evaluation.strengths),
+            gaps=cls._findings(evaluation.gaps),
+            evidence=cls._evidence(evaluation.evidence),
+            category_scores=cls._category_scores(analysis.get("category_scores", [])),
+            processing_state=AIProcessingState.COMPLETED,
         )
+
+    @staticmethod
+    def _findings(value: object) -> list[EvaluationFindingType]:
+        if not isinstance(value, list):
+            return []
+        findings: list[EvaluationFindingType] = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                findings.append(EvaluationFindingType(summary=item.strip(), evidence=[]))
+            elif isinstance(item, dict) and str(item.get("summary", "")).strip():
+                evidence = item.get("evidence", [])
+                findings.append(
+                    EvaluationFindingType(
+                        summary=str(item["summary"]).strip(),
+                        evidence=[str(entry) for entry in evidence]
+                        if isinstance(evidence, list)
+                        else [],
+                    )
+                )
+        return findings
+
+    @staticmethod
+    def _evidence(value: object) -> list[EvaluationEvidenceType]:
+        if not isinstance(value, list):
+            return []
+        evidence_items: list[EvaluationEvidenceType] = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                evidence_items.append(
+                    EvaluationEvidenceType(
+                        claim=item.strip(),
+                        resume_evidence=item.strip(),
+                        category=None,
+                    )
+                )
+            elif isinstance(item, dict):
+                claim = str(item.get("claim", "")).strip()
+                resume_evidence = str(item.get("resume_evidence", "")).strip()
+                if claim and resume_evidence:
+                    category = item.get("category")
+                    evidence_items.append(
+                        EvaluationEvidenceType(
+                            claim=claim,
+                            resume_evidence=resume_evidence,
+                            category=str(category) if category else None,
+                        )
+                    )
+        return evidence_items
+
+    @staticmethod
+    def _category_scores(value: object) -> list[EvaluationCategoryScoreType]:
+        if not isinstance(value, list):
+            return []
+        scores: list[EvaluationCategoryScoreType] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            try:
+                evidence = item.get("evidence", [])
+                scores.append(
+                    EvaluationCategoryScoreType(
+                        name=str(item["name"]),
+                        score=Decimal(str(item["score"])),
+                        weight=int(item["weight"]),
+                        weighted_score=Decimal(str(item["weighted_score"])),
+                        rationale=str(item["rationale"]),
+                        evidence=[str(entry) for entry in evidence]
+                        if isinstance(evidence, list)
+                        else [],
+                    )
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+        return scores
 
 
 @strawberry.type
@@ -195,6 +312,7 @@ class ApplicationType:
     cover_letter: str | None
     status: ApplicationStatus
     fit_score: Decimal | None
+    evaluation_processing_state: AIProcessingState
     applied_at: datetime
     updated_at: datetime
 
@@ -214,6 +332,7 @@ class ApplicationType:
             cover_letter=application.cover_letter,
             status=application.status,
             fit_score=application.fit_score,
+            evaluation_processing_state=application.evaluation_processing_state,
             applied_at=application.applied_at,
             updated_at=application.updated_at,
         )
@@ -226,6 +345,7 @@ class ApplicationListItemType:
     job_id: strawberry.ID
     status: ApplicationStatus
     fit_score: Decimal | None
+    evaluation_processing_state: AIProcessingState
     resume_url: str | None
     cover_letter: str | None
     applied_at: datetime
@@ -248,6 +368,7 @@ class ApplicationListItemType:
             job_id=strawberry.ID(str(application.job_id)),
             status=application.status,
             fit_score=application.fit_score,
+            evaluation_processing_state=application.evaluation_processing_state,
             resume_url=application.resume_url,
             cover_letter=application.cover_letter,
             applied_at=application.applied_at,
@@ -272,6 +393,7 @@ class ApplicationDetailType:
     job_id: strawberry.ID
     status: ApplicationStatus
     fit_score: Decimal | None
+    evaluation_processing_state: AIProcessingState
     resume_url: str | None
     cover_letter: str | None
     applied_at: datetime
@@ -300,6 +422,7 @@ class ApplicationDetailType:
             job_id=strawberry.ID(str(application.job_id)),
             status=application.status,
             fit_score=application.fit_score,
+            evaluation_processing_state=application.evaluation_processing_state,
             resume_url=application.resume_url,
             cover_letter=application.cover_letter,
             applied_at=application.applied_at,
@@ -335,6 +458,53 @@ class ApplicationsResult:
 class ApplicationResult:
     success: bool
     application: ApplicationDetailType | None
+    errors: list[OperationError]
+
+
+@strawberry.type
+class RecommendedApplicationType:
+    id: strawberry.ID
+    status: ApplicationStatus
+    fit_score: Decimal
+    evaluation_processing_state: AIProcessingState
+    applied_at: datetime
+
+    @classmethod
+    def from_model(cls, application: Application) -> "RecommendedApplicationType":
+        return cls(
+            id=strawberry.ID(str(application.id)),
+            status=application.status,
+            fit_score=application.fit_score or Decimal("0"),
+            evaluation_processing_state=application.evaluation_processing_state,
+            applied_at=application.applied_at,
+        )
+
+
+@strawberry.type
+class RecommendedCandidateType:
+    candidate: CandidateDetails
+    application: RecommendedApplicationType
+    evaluation: EvaluationType
+
+    @classmethod
+    def from_models(
+        cls,
+        application: Application,
+        evaluation: AIEvaluation,
+    ) -> "RecommendedCandidateType":
+        return cls(
+            candidate=CandidateDetails.from_model(application.candidate),
+            application=RecommendedApplicationType.from_model(application),
+            evaluation=EvaluationType.from_model(evaluation),
+        )
+
+
+@strawberry.type
+class RecommendedCandidatesResult:
+    success: bool
+    items: list[RecommendedCandidateType]
+    total_count: int
+    limit: int
     errors: list[OperationError]
 
 

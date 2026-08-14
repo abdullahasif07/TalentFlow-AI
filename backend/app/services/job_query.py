@@ -3,7 +3,7 @@ from tortoise.functions import Count
 from tortoise.queryset import QuerySet
 
 from app.db.models import Job
-from app.enums import ApplicationStatus
+from app.enums import AIProcessingState, ApplicationStatus
 
 
 class RecruiterJobQueryService:
@@ -30,5 +30,14 @@ class RecruiterJobQueryService:
                 "applications",
                 distinct=True,
                 _filter=Q(applications__status=ApplicationStatus.HIRED),
+            ),
+            recommended_candidate_count=Count(
+                "applications__ai_evaluation",
+                distinct=True,
+                _filter=Q(
+                    applications__evaluation_processing_state=(
+                        AIProcessingState.COMPLETED
+                    )
+                ),
             ),
         )

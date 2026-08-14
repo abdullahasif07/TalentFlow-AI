@@ -11,11 +11,14 @@ from app.graphql.types.application import (
     CandidateDetails,
     CandidateSummary,
     EvaluationType,
+    RecommendedCandidateType,
+    RecommendedCandidatesResult,
     RecruiterSummary,
     ResumeType,
     SubmitApplicationPayload,
     UpdateApplicationStatusPayload,
 )
+from app.graphql.types.ai import AIProcessingPayload, BatchScreeningPayload
 from app.graphql.types.common import (
     OffsetPageInfo,
     OperationError,
@@ -25,6 +28,7 @@ from app.graphql.types.common import (
 from app.graphql.types.job import CreateJobPayload, JobResult, JobsResult, JobSummary, JobType
 
 __all__ = [
+    "AIProcessingPayload",
     "AddApplicationNotePayload",
     "ApplicationDetailType",
     "ApplicationListItemType",
@@ -34,6 +38,7 @@ __all__ = [
     "ApplicationsResult",
     "ApplicationType",
     "BulkUpdateApplicationStatusPayload",
+    "BatchScreeningPayload",
     "CandidateDetails",
     "CandidateSummary",
     "CreateJobPayload",
@@ -47,6 +52,8 @@ __all__ = [
     "OperationErrorCode",
     "ResumeType",
     "RecruiterSummary",
+    "RecommendedCandidateType",
+    "RecommendedCandidatesResult",
     "SubmitApplicationPayload",
     "UpdateApplicationStatusPayload",
     "operation_error",
