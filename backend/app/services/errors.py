@@ -90,6 +90,50 @@ class JobCriteriaProviderError(JobCriteriaError):
     pass
 
 
+class CandidateEvaluationError(Exception):
+    """Base exception for safe, client-facing candidate evaluation errors."""
+
+
+class EvaluationApplicationNotFoundError(CandidateEvaluationError):
+    pass
+
+
+class MissingStructuredResumeDataError(CandidateEvaluationError):
+    pass
+
+
+class MissingJobEvaluationCriteriaError(CandidateEvaluationError):
+    pass
+
+
+class InvalidCandidateEvaluationInputError(CandidateEvaluationError):
+    pass
+
+
+class InvalidCandidateEvaluationOutputError(CandidateEvaluationError):
+    pass
+
+
+class CandidateEvaluationProviderError(CandidateEvaluationError):
+    pass
+
+
+class AIProcessingRequestError(Exception):
+    """Base exception for safe AI task-enqueue failures."""
+
+
+class ProcessingResourceNotFoundError(AIProcessingRequestError):
+    pass
+
+
+class ProcessingPrerequisiteError(AIProcessingRequestError):
+    pass
+
+
+class ProcessingQueueError(AIProcessingRequestError):
+    pass
+
+
 class ApplicationPipelineError(Exception):
     """Base exception for safe, client-facing pipeline errors."""
 
