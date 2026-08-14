@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     max_resume_size_bytes: int = 10 * 1024 * 1024
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-4.1-mini"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+    celery_task_max_retries: int = 3
+    celery_retry_backoff_seconds: int = 5
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
