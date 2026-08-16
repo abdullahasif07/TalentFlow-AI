@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgres://postgres:postgres@localhost:5432/talentflow_ai"
     app_env: str = "development"
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+    )
     upload_root: Path = BACKEND_DIR / "uploads"
     max_resume_size_bytes: int = 10 * 1024 * 1024
     openai_api_key: SecretStr | None = None
