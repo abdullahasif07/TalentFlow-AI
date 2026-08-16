@@ -1,10 +1,34 @@
 # TalentFlow AI frontend
 
-This is the initial Next.js App Router scaffold. No product UI or backend client is implemented yet.
+The recruiter workspace is built with Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui-style components, and Apollo Client.
+
+## Local setup
 
 ```bash
+cp .env.example .env.local
 npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>.
+Set `NEXT_PUBLIC_GRAPHQL_URL` in `.env.local` to the TalentFlow backend GraphQL endpoint. The local default is:
+
+```text
+NEXT_PUBLIC_GRAPHQL_URL=http://localhost:8000/graphql
+```
+
+Open <http://localhost:3000>. The root route redirects to `/dashboard`.
+
+## Available routes
+
+- `/dashboard` — live recruiter overview powered by the jobs GraphQL query
+- `/jobs` — searchable, status-filtered job list
+- `/jobs/[id]` — job details, requirements, and hiring statistics
+- `/candidates`, `/pipeline`, `/ai-activity` — foundation placeholder routes
+
+## Checks
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
