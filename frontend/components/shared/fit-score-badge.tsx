@@ -19,11 +19,7 @@ export function FitScore({
 }) {
   const numericScore = score === null ? null : Number(score);
 
-  if (
-    processingState !== "COMPLETED" ||
-    numericScore === null ||
-    !Number.isFinite(numericScore)
-  ) {
+  if (numericScore === null || !Number.isFinite(numericScore)) {
     const state = processingState === "COMPLETED" ? "NOT_STARTED" : processingState;
     const stateColor =
       state === "PROCESSING"
