@@ -106,6 +106,10 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
         await Resume.create(
             candidate_id=self.bob.candidate_id,
             file_url="uploads/resumes/current/bob-current.pdf",
+            parsed_data={
+                "professional_summary": "Backend engineer focused on reliable APIs.",
+                "skills": ["Python", "PostgreSQL"],
+            },
         )
         await AIEvaluation.create(
             application=self.bob,
@@ -164,7 +168,7 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
                   candidate {
                     id name email phone linkedinUrl githubUrl portfolioUrl
                   }
-                  resume { id fileUrl }
+                  resume { id fileUrl parsedData }
                   evaluation { overallScore recommendation confidence }
                 }
                 errors { code message field }
@@ -292,7 +296,7 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
                   id status fitScore coverLetter appliedAt updatedAt
                   candidate { name email phone linkedinUrl githubUrl portfolioUrl }
                   job { id companyId title description status }
-                  resume { id fileUrl }
+                  resume { id fileUrl parsedData }
                   evaluation { overallScore recommendation confidence }
                   statusHistory { previousStatus newStatus changedBy createdAt }
                   outreachEmails { subject body status generatedAt approvedAt sentAt }
@@ -310,6 +314,10 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(application["candidate"]["name"], "Bob Rivera")
         self.assertEqual(application["job"]["title"], "Backend Engineer")
         self.assertEqual(application["resume"]["fileUrl"], self.bob.resume_url)
+        self.assertEqual(
+            application["resume"]["parsedData"]["skills"],
+            ["Python", "PostgreSQL"],
+        )
         self.assertEqual(application["evaluation"]["confidence"], "HIGH")
         self.assertEqual(len(application["statusHistory"]), 2)
         self.assertEqual(application["outreachEmails"][0]["status"], "DRAFT")

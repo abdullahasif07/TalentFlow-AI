@@ -44,8 +44,16 @@ def evaluation_analysis(score: int) -> dict[str, object]:
         "gaps": [
             {"summary": "Cloud experience is not shown.", "evidence": []}
         ],
-        "matched_requirements": [],
-        "missing_requirements": [],
+        "matched_requirements": [
+            {"requirement": "Python", "status": "MATCH", "evidence": "Python"}
+        ],
+        "missing_requirements": [
+            {
+                "requirement": "Cloud experience",
+                "status": "MISSING_EVIDENCE",
+                "evidence": None,
+            }
+        ],
         "category_scores": [
             {
                 "name": "Technical Skills",
@@ -465,6 +473,8 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
                         overallScore confidence recommendation processingState
                         strengths { summary evidence }
                         gaps { summary evidence }
+                        matchedRequirements { requirement status evidence }
+                        missingRequirements { requirement status evidence }
                         evidence { claim resumeEvidence category }
                         categoryScores {
                           name score weight weightedScore rationale evidence
@@ -485,6 +495,12 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(evaluation["strengths"][0]["summary"], "Python is explicitly supported.")
         self.assertEqual(evaluation["gaps"][0]["summary"], "Cloud experience is not shown.")
         self.assertEqual(evaluation["evidence"][0]["resumeEvidence"], "Python")
+        self.assertEqual(evaluation["matchedRequirements"][0]["status"], "MATCH")
+        self.assertEqual(
+            evaluation["missingRequirements"][0]["status"],
+            "MISSING_EVIDENCE",
+        )
+        self.assertIsNone(evaluation["missingRequirements"][0]["evidence"])
         self.assertEqual(evaluation["categoryScores"][0]["weight"], 100)
 
 

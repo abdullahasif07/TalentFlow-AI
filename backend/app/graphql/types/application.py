@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 
 import strawberry
+from strawberry.scalars import JSON
 
 from app.db.models import (
     AIEvaluation,
@@ -76,6 +78,7 @@ class CandidateDetails:
 class ResumeType:
     id: strawberry.ID
     file_url: str
+    parsed_data: JSON
     processing_state: AIProcessingState
 
     @classmethod
@@ -85,6 +88,7 @@ class ResumeType:
         return cls(
             id=strawberry.ID(str(resume.id)),
             file_url=application_file_url or resume.file_url,
+            parsed_data=resume.parsed_data,
             processing_state=resume.processing_state,
         )
 
@@ -112,6 +116,21 @@ class EvaluationCategoryScoreType:
     evidence: list[str]
 
 
+@strawberry.enum
+class EvaluationRequirementStatus(str, Enum):
+    MATCH = "MATCH"
+    PARTIAL_MATCH = "PARTIAL_MATCH"
+    MISSING_EVIDENCE = "MISSING_EVIDENCE"
+    NOT_MET = "NOT_MET"
+
+
+@strawberry.type
+class EvaluationRequirementType:
+    requirement: str
+    status: EvaluationRequirementStatus
+    evidence: str | None
+
+
 @strawberry.type
 class EvaluationType:
     id: strawberry.ID
@@ -121,6 +140,8 @@ class EvaluationType:
     strengths: list[EvaluationFindingType]
     gaps: list[EvaluationFindingType]
     evidence: list[EvaluationEvidenceType]
+    matched_requirements: list[EvaluationRequirementType]
+    missing_requirements: list[EvaluationRequirementType]
     category_scores: list[EvaluationCategoryScoreType]
     processing_state: AIProcessingState
 
@@ -139,6 +160,12 @@ class EvaluationType:
             strengths=cls._findings(evaluation.strengths),
             gaps=cls._findings(evaluation.gaps),
             evidence=cls._evidence(evaluation.evidence),
+            matched_requirements=cls._requirements(
+                analysis.get("matched_requirements", [])
+            ),
+            missing_requirements=cls._requirements(
+                analysis.get("missing_requirements", [])
+            ),
             category_scores=cls._category_scores(analysis.get("category_scores", [])),
             processing_state=AIProcessingState.COMPLETED,
         )
@@ -216,6 +243,31 @@ class EvaluationType:
             except (KeyError, TypeError, ValueError):
                 continue
         return scores
+
+    @staticmethod
+    def _requirements(value: object) -> list[EvaluationRequirementType]:
+        if not isinstance(value, list):
+            return []
+        requirements: list[EvaluationRequirementType] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            requirement = str(item.get("requirement", "")).strip()
+            try:
+                status = EvaluationRequirementStatus(str(item.get("status", "")))
+            except ValueError:
+                continue
+            if not requirement:
+                continue
+            evidence = item.get("evidence")
+            requirements.append(
+                EvaluationRequirementType(
+                    requirement=requirement,
+                    status=status,
+                    evidence=str(evidence).strip() if evidence else None,
+                )
+            )
+        return requirements
 
 
 @strawberry.type
