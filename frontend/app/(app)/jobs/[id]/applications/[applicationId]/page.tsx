@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
-import { UserRound } from "lucide-react";
 
-import { PlaceholderPage } from "@/components/shared/placeholder-page";
+import { ApplicationDetailPage } from "@/components/applications/application-detail";
+import { PageContainer } from "@/components/shared/page-container";
 
 export const metadata: Metadata = { title: "Application" };
 
-export default function ApplicationPlaceholderPage() {
+export default async function ApplicationPage({
+  params,
+}: {
+  params: Promise<{ id: string; applicationId: string }>;
+}) {
+  const { id, applicationId } = await params;
+
   return (
-    <PlaceholderPage
-      title="Application details"
-      description="The full candidate profile and evaluation report will be built in a future step."
-      icon={UserRound}
-    />
+    <PageContainer>
+      <ApplicationDetailPage jobId={id} applicationId={applicationId} />
+    </PageContainer>
   );
 }
