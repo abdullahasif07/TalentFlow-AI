@@ -15,8 +15,6 @@ export const GET_RECENT_APPLICATIONS = gql`
       items {
         id
         status
-        fitScore
-        evaluationProcessingState
         appliedAt
         candidate {
           id
@@ -59,14 +57,6 @@ export const GET_JOB_APPLICATIONS = gql`
           id
           name
           email
-          phone
-        }
-        evaluation {
-          id
-          overallScore
-          recommendation
-          confidence
-          processingState
         }
       }
     }
@@ -86,7 +76,6 @@ export const GET_RECOMMENDED_CANDIDATES = gql`
       }
       items {
         candidate {
-          id
           name
           email
         }
@@ -94,15 +83,12 @@ export const GET_RECOMMENDED_CANDIDATES = gql`
           id
           status
           fitScore
-          evaluationProcessingState
-          appliedAt
         }
         evaluation {
           id
           overallScore
           recommendation
           confidence
-          processingState
           strengths {
             summary
             evidence
@@ -238,11 +224,77 @@ export const GENERATE_CANDIDATE_EVALUATION = gql`
   }
 `;
 
+export const UPDATE_APPLICATION_STATUS = gql`
+  mutation UpdateApplicationStatus($input: UpdateApplicationStatusInput!) {
+    updateApplicationStatus(input: $input) {
+      success
+      application {
+        id
+        status
+        updatedAt
+      }
+      errors {
+        code
+        message
+        field
+      }
+    }
+  }
+`;
+
+export const ADD_APPLICATION_NOTE = gql`
+  mutation AddApplicationNote($input: AddApplicationNoteInput!) {
+    addApplicationNote(input: $input) {
+      success
+      note {
+        id
+        content
+        recruiter {
+          id
+          name
+          email
+        }
+        createdAt
+        updatedAt
+      }
+      errors {
+        code
+        message
+        field
+      }
+    }
+  }
+`;
+
+export const APPLICATION_STATUSES = [
+  "APPLIED",
+  "AI_REVIEWED",
+  "HUMAN_REVIEW",
+  "SHORTLISTED",
+  "CONTACTED",
+  "REPLIED",
+  "INTERVIEW",
+  "OFFER",
+  "HIRED",
+  "REJECTED",
+] as const;
+
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
+export function formatApplicationStatus(status: ApplicationStatus | string) {
+  const normalized = status.replaceAll("_", " ").toLowerCase();
+  return normalized.replace(/^./, (letter) => letter.toUpperCase());
+}
+
+export function formatEvaluationRecommendation(value: string) {
+  if (!value.includes("_")) return value;
+  const normalized = value.replaceAll("_", " ").toLowerCase();
+  return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export interface RecentApplication {
   id: string;
-  status: string;
-  fitScore: number | string | null;
-  evaluationProcessingState: ProcessingState;
+  status: ApplicationStatus;
   appliedAt: string;
   candidate: {
     id: string;
@@ -273,7 +325,7 @@ export type ApplicationSort =
 
 export interface ApplicantListItem {
   id: string;
-  status: string;
+  status: ApplicationStatus;
   fitScore: number | string | null;
   evaluationProcessingState: ProcessingState;
   appliedAt: string;
@@ -281,15 +333,7 @@ export interface ApplicantListItem {
     id: string;
     name: string;
     email: string;
-    phone: string | null;
   };
-  evaluation: {
-    id: string;
-    overallScore: number | string;
-    recommendation: string;
-    confidence: string;
-    processingState: ProcessingState;
-  } | null;
 }
 
 export interface JobApplicationsQueryData {
@@ -314,23 +358,19 @@ export interface EvaluationFinding {
 
 export interface RecommendedCandidate {
   candidate: {
-    id: string;
     name: string;
     email: string;
   };
   application: {
     id: string;
-    status: string;
+    status: ApplicationStatus;
     fitScore: number | string;
-    evaluationProcessingState: ProcessingState;
-    appliedAt: string;
   };
   evaluation: {
     id: string;
     overallScore: number | string;
     recommendation: string;
     confidence: string;
-    processingState: ProcessingState;
     strengths: EvaluationFinding[];
     gaps: EvaluationFinding[];
   };
@@ -377,7 +417,7 @@ export interface ApplicationDetail {
   id: string;
   candidateId: string;
   jobId: string;
-  status: string;
+  status: ApplicationStatus;
   fitScore: number | string | null;
   evaluationProcessingState: ProcessingState;
   resumeUrl: string | null;
@@ -421,22 +461,24 @@ export interface ApplicationDetail {
   } | null;
   statusHistory: Array<{
     id: string;
-    previousStatus: string | null;
-    newStatus: string;
+    previousStatus: ApplicationStatus | null;
+    newStatus: ApplicationStatus;
     changedBy: string;
     createdAt: string;
   }>;
-  notes: Array<{
+  notes: ApplicationNote[];
+}
+
+export interface ApplicationNote {
+  id: string;
+  content: string;
+  recruiter: {
     id: string;
-    content: string;
-    recruiter: {
-      id: string;
-      name: string;
-      email: string;
-    } | null;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+    name: string;
+    email: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApplicationDetailQueryData {
@@ -455,6 +497,26 @@ export interface GenerateCandidateEvaluationData {
     state: ProcessingState;
     message: string;
     taskId: string | null;
+    errors: OperationError[];
+  };
+}
+
+export interface UpdateApplicationStatusData {
+  updateApplicationStatus: {
+    success: boolean;
+    application: {
+      id: string;
+      status: ApplicationStatus;
+      updatedAt: string;
+    } | null;
+    errors: OperationError[];
+  };
+}
+
+export interface AddApplicationNoteData {
+  addApplicationNote: {
+    success: boolean;
+    note: ApplicationNote | null;
     errors: OperationError[];
   };
 }
