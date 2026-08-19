@@ -11,15 +11,19 @@ import { EvaluationPreview } from "@/components/applications/evaluation-preview"
 import { ResumeOverview } from "@/components/applications/resume-overview";
 import { ErrorState } from "@/components/shared/error-state";
 import { FitScore } from "@/components/shared/fit-score-badge";
-import { LoadingState } from "@/components/shared/loading-state";
-import { ProcessingStateBadge } from "@/components/shared/processing-state-badge";
+import {
+  ProcessingStateBadge,
+  evaluationStateLabel,
+} from "@/components/shared/processing-state-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   GET_APPLICATION_DETAIL,
   type ApplicationDetailQueryData,
 } from "@/lib/graphql/applications";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import { formatDate } from "@/lib/graphql/jobs";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +71,40 @@ export function ApplicationDetailPage({
     return (
       <div className="space-y-6">
         {backLink}
-        <LoadingState cards={4} />
+        <div className="flex items-start gap-4" aria-busy="true" aria-label="Loading application">
+          <Skeleton className="size-13 shrink-0 rounded-xl" />
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <Skeleton className="h-8 w-64 max-w-full" />
+            <Skeleton className="h-4 w-52 max-w-full" />
+            <Skeleton className="h-6 w-36" />
+          </div>
+          <Skeleton className="hidden h-8 w-20 sm:block" />
+        </div>
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-6">
+            <Card className="p-5">
+              <Skeleton className="h-5 w-44" />
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {Array.from({ length: 5 }, (_, index) => (
+                  <Skeleton key={index} className="h-16 w-full" />
+                ))}
+              </div>
+            </Card>
+            <Card className="p-5">
+              <Skeleton className="h-5 w-28" />
+              <Skeleton className="mt-5 h-32 w-full" />
+              <Skeleton className="mt-4 h-24 w-full" />
+            </Card>
+          </div>
+          <div className="space-y-5">
+            {Array.from({ length: 3 }, (_, index) => (
+              <Card key={index} className="p-5">
+                <Skeleton className="h-5 w-36" />
+                <Skeleton className="mt-5 h-24 w-full" />
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -76,7 +113,7 @@ export function ApplicationDetailPage({
     return (
       <div className="space-y-6">
         {backLink}
-        <ErrorState description={error.message} onRetry={() => void refetch()} />
+        <ErrorState description={graphQLErrorMessage(error)} onRetry={() => void refetch()} />
       </div>
     );
   }
@@ -140,7 +177,7 @@ export function ApplicationDetailPage({
               </span>
               <ProcessingStateBadge
                 state={application.evaluationProcessingState}
-                label={`AI: ${application.evaluationProcessingState.replaceAll("_", " ").toLowerCase()}`}
+                label={`AI: ${evaluationStateLabel(application.evaluationProcessingState)}`}
               />
             </div>
           </div>
@@ -182,7 +219,10 @@ export function ApplicationDetailPage({
           />
         </main>
 
-        <ApplicationSidebar application={application} />
+        <ApplicationSidebar
+          application={application}
+          onApplicationUpdated={() => refetch()}
+        />
       </div>
     </div>
   );

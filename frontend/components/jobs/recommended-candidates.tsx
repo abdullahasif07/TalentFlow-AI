@@ -12,8 +12,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   GET_RECOMMENDED_CANDIDATES,
+  formatEvaluationRecommendation,
   type RecommendedCandidatesQueryData,
 } from "@/lib/graphql/applications";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 
 function RecommendedLoading() {
   return (
@@ -46,7 +48,7 @@ export function RecommendedCandidates({ jobId }: { jobId: string }) {
 
   if (loading && !data) return <RecommendedLoading />;
   if (error) {
-    return <ErrorState description={error.message} onRetry={() => void refetch()} />;
+    return <ErrorState description={graphQLErrorMessage(error)} onRetry={() => void refetch()} />;
   }
   if (data && !data.recommendedCandidates.success) {
     return (
@@ -110,7 +112,7 @@ export function RecommendedCandidates({ jobId }: { jobId: string }) {
             </div>
 
             <p className="mt-4 line-clamp-2 text-sm leading-6 text-muted-foreground">
-              {evaluation.recommendation}
+              {formatEvaluationRecommendation(evaluation.recommendation)}
             </p>
 
             <div className="mt-4 space-y-2.5 text-xs">

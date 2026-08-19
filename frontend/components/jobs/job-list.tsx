@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { GET_JOBS, type JobsQueryData, type JobStatus, formatDate } from "@/lib/graphql/jobs";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 
 type StatusFilter = "ALL" | JobStatus;
 type SortOrder = "NEWEST" | "OLDEST";
@@ -57,7 +58,9 @@ export function JobList() {
   };
 
   if (loading && !data) return <LoadingState cards={3} />;
-  if (error) return <ErrorState description={error.message} onRetry={() => void refetch()} />;
+  if (error) {
+    return <ErrorState description={graphQLErrorMessage(error)} onRetry={() => void refetch()} />;
+  }
   if (data && !data.jobs.success) {
     return <ErrorState description={data.jobs.errors[0]?.message} onRetry={() => void refetch()} />;
   }
@@ -147,8 +150,13 @@ export function JobList() {
                 {jobs.map((job) => (
                   <tr
                     key={job.id}
+                    role="link"
+                    tabIndex={0}
                     className="group cursor-pointer transition-colors hover:bg-muted/35 focus-within:bg-muted/35"
                     onClick={() => router.push(`/jobs/${job.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") router.push(`/jobs/${job.id}`);
+                    }}
                   >
                     <td className="px-5 py-4">
                       <Link

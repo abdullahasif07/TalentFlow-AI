@@ -27,6 +27,7 @@ import {
   GET_RECENT_APPLICATIONS,
   type RecentApplicationsQueryData,
 } from "@/lib/graphql/applications";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import { GET_JOBS, type JobsQueryData, formatDate } from "@/lib/graphql/jobs";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +66,11 @@ function RecentActivity({ jobId, jobTitle }: { jobId: string; jobTitle: string }
     return (
       <ErrorState
         title="Recent activity is unavailable"
-        description={error?.message ?? data?.applications.errors[0]?.message}
+        description={
+          error
+            ? graphQLErrorMessage(error)
+            : data?.applications.errors[0]?.message
+        }
         onRetry={() => void refetch()}
       />
     );
@@ -89,7 +94,7 @@ function RecentActivity({ jobId, jobTitle }: { jobId: string; jobTitle: string }
         {applications.map((application) => (
           <Link
             key={application.id}
-            href={`/jobs/${application.job.id}`}
+            href={`/jobs/${application.job.id}/applications/${application.id}`}
             className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-muted/40 sm:px-5"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e8f3f0] text-xs font-bold text-primary">
@@ -126,7 +131,9 @@ export function DashboardOverview() {
   });
 
   if (loading && !data) return <LoadingState cards={5} />;
-  if (error) return <ErrorState description={error.message} onRetry={() => void refetch()} />;
+  if (error) {
+    return <ErrorState description={graphQLErrorMessage(error)} onRetry={() => void refetch()} />;
+  }
   if (data && !data.jobs.success) {
     return <ErrorState description={data.jobs.errors[0]?.message} onRetry={() => void refetch()} />;
   }

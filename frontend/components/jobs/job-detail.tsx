@@ -23,6 +23,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { GET_JOB, type JobQueryData, formatDate, stringList } from "@/lib/graphql/jobs";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import { cn } from "@/lib/utils";
 
 type JobTab = "APPLICANTS" | "RECOMMENDED" | "DETAILS";
@@ -31,18 +32,46 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const [activeTab, setActiveTab] = useState<JobTab>("APPLICANTS");
   const { data, loading, error, refetch } = useQuery<JobQueryData>(GET_JOB, {
     variables: { input: { id: jobId } },
+    fetchPolicy: "cache-and-network",
   });
 
-  if (loading) return <LoadingState cards={5} />;
+  const backLink = (
+    <Link
+      href="/jobs"
+      className={cn(
+        buttonVariants({ variant: "ghost", size: "sm" }),
+        "-ml-3 text-muted-foreground",
+      )}
+    >
+      <ArrowLeft /> Back to jobs
+    </Link>
+  );
+
+  if (loading && !data) {
+    return (
+      <div className="space-y-6">
+        {backLink}
+        <LoadingState cards={5} />
+      </div>
+    );
+  }
   if (error) {
-    return <ErrorState description={error.message} onRetry={() => void refetch()} />;
+    return (
+      <div className="space-y-6">
+        {backLink}
+        <ErrorState description={graphQLErrorMessage(error)} onRetry={() => void refetch()} />
+      </div>
+    );
   }
   if (!data?.job.success || !data.job.job) {
     return (
-      <ErrorState
-        title="Job not found"
-        description={data?.job.errors[0]?.message ?? "This role may no longer exist."}
-      />
+      <div className="space-y-6">
+        {backLink}
+        <ErrorState
+          title="Job not found"
+          description={data?.job.errors[0]?.message ?? "This role may no longer exist."}
+        />
+      </div>
     );
   }
 
@@ -61,15 +90,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-7">
-      <Link
-        href="/jobs"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "-ml-3 text-muted-foreground",
-        )}
-      >
-        <ArrowLeft /> Back to jobs
-      </Link>
+      {backLink}
 
       <section>
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
