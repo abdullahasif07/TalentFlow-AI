@@ -2,7 +2,18 @@ import { CheckCircle2, CircleX, Clock3, LoaderCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-type ProcessingState = "NOT_STARTED" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type ProcessingState = "NOT_STARTED" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+const evaluationStateLabels: Record<ProcessingState, string> = {
+  NOT_STARTED: "Not evaluated",
+  PROCESSING: "Evaluating",
+  COMPLETED: "Evaluated",
+  FAILED: "Evaluation failed",
+};
+
+export function evaluationStateLabel(state: ProcessingState) {
+  return evaluationStateLabels[state];
+}
 
 const statePresentation = {
   NOT_STARTED: {

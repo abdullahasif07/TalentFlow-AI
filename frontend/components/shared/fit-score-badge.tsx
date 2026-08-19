@@ -4,8 +4,8 @@ type EvaluationState = "NOT_STARTED" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 const stateLabels: Record<Exclude<EvaluationState, "COMPLETED">, string> = {
   NOT_STARTED: "Not evaluated",
-  PROCESSING: "Processing",
-  FAILED: "Failed",
+  PROCESSING: "Evaluating",
+  FAILED: "Evaluation failed",
 };
 
 export function FitScore({

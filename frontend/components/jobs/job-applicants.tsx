@@ -16,40 +16,27 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { FitScore } from "@/components/shared/fit-score-badge";
+import {
+  ProcessingStateBadge,
+  evaluationStateLabel,
+} from "@/components/shared/processing-state-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  APPLICATION_STATUSES,
   GET_JOB_APPLICATIONS,
   type ApplicationSort,
   type JobApplicationsQueryData,
+  formatApplicationStatus,
 } from "@/lib/graphql/applications";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import { formatDate } from "@/lib/graphql/jobs";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
-
-const processingLabels = {
-  NOT_STARTED: "Not evaluated",
-  PROCESSING: "Processing",
-  COMPLETED: "Completed",
-  FAILED: "Failed",
-} as const;
-
-const applicationStatuses = [
-  "APPLIED",
-  "AI_REVIEWED",
-  "HUMAN_REVIEW",
-  "SHORTLISTED",
-  "CONTACTED",
-  "REPLIED",
-  "INTERVIEW",
-  "OFFER",
-  "HIRED",
-  "REJECTED",
-] as const;
 
 function ApplicantsLoading() {
   return (
@@ -114,7 +101,7 @@ export function JobApplicants({ jobId }: { jobId: string }) {
 
   if (loading && !data) return <ApplicantsLoading />;
   if (error) {
-    return <ErrorState description={error.message} onRetry={() => void refetch()} />;
+    return <ErrorState description={graphQLErrorMessage(error)} onRetry={() => void refetch()} />;
   }
   if (data && !data.applications.success) {
     return (
@@ -159,9 +146,9 @@ export function JobApplicants({ jobId }: { jobId: string }) {
                 aria-label="Filter applicants by status"
               >
                 <option value="ALL">All statuses</option>
-                {applicationStatuses.map((value) => (
+                {APPLICATION_STATUSES.map((value) => (
                   <option key={value} value={value}>
-                    {value.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}
+                    {formatApplicationStatus(value)}
                   </option>
                 ))}
               </select>
@@ -259,9 +246,10 @@ export function JobApplicants({ jobId }: { jobId: string }) {
                         {formatDate(application.appliedAt)}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="text-sm font-medium capitalize text-muted-foreground">
-                          {processingLabels[application.evaluationProcessingState]}
-                        </span>
+                        <ProcessingStateBadge
+                          state={application.evaluationProcessingState}
+                          label={evaluationStateLabel(application.evaluationProcessingState)}
+                        />
                       </td>
                       <td className="px-5 py-4 text-right">
                         <Link
