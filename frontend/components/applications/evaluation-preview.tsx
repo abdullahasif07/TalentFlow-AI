@@ -14,18 +14,23 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { ProcessingStateBadge } from "@/components/shared/processing-state-badge";
+import {
+  ProcessingStateBadge,
+  evaluationStateLabel,
+} from "@/components/shared/processing-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   GENERATE_CANDIDATE_EVALUATION,
+  formatEvaluationRecommendation,
   type ApplicationDetail,
   type EvaluationFinding,
   type EvaluationRequirement,
   type GenerateCandidateEvaluationData,
   type RequirementMatchStatus,
 } from "@/lib/graphql/applications";
+import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import { cn } from "@/lib/utils";
 
 interface EvaluationPreviewProps {
@@ -62,10 +67,6 @@ const requirementPresentation: Record<
 function titleCase(value: string) {
   const normalized = value.replaceAll("_", " ").trim().toLowerCase();
   return normalized.replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function readableRecommendation(value: string) {
-  return value.includes("_") ? titleCase(value) : value;
 }
 
 function numericScore(value: number | string) {
@@ -177,9 +178,7 @@ function EvaluationActionState({
       setMessage(payload.message || "Evaluation queued successfully.");
       await onEvaluationQueued?.();
     } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : "The evaluation could not be queued.",
-      );
+      setActionError(graphQLErrorMessage(error, "The evaluation could not be queued."));
     }
   }
 
@@ -246,6 +245,7 @@ export function EvaluationPreview({
 }: EvaluationPreviewProps) {
   const state = application.evaluationProcessingState;
   const evaluation = application.evaluation;
+  const overallScore = application.fitScore ?? evaluation?.overallScore ?? 0;
 
   const matchedRequirements = evaluation?.matchedRequirements ?? [];
   const missingRequirements = evaluation?.missingRequirements ?? [];
@@ -269,7 +269,7 @@ export function EvaluationPreview({
             </p>
           </div>
         </div>
-        <ProcessingStateBadge state={state} />
+        <ProcessingStateBadge state={state} label={evaluationStateLabel(state)} />
       </CardHeader>
       <CardContent className="pt-5">
         {state !== "COMPLETED" ? (
@@ -292,13 +292,13 @@ export function EvaluationPreview({
                   Overall fit
                 </p>
                 <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums">
-                  {Math.round(numericScore(evaluation.overallScore))}
+                  {Math.round(numericScore(overallScore))}
                   <span className="ml-1 text-lg font-medium text-muted-foreground">/ 100</span>
                 </p>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-primary"
-                    style={{ width: `${numericScore(evaluation.overallScore)}%` }}
+                    style={{ width: `${numericScore(overallScore)}%` }}
                   />
                 </div>
               </div>
@@ -309,7 +309,7 @@ export function EvaluationPreview({
                   </Badge>
                 </div>
                 <p className="mt-3 break-words text-lg font-semibold leading-7">
-                  {readableRecommendation(evaluation.recommendation)}
+                  {formatEvaluationRecommendation(evaluation.recommendation)}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   This report supports recruiter review. It does not make or change a hiring decision.
