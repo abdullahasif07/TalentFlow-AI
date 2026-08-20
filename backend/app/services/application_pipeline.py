@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from tortoise.transactions import in_transaction
 
 from app.db.models import Application, ApplicationStatusHistory, Job, Recruiter
@@ -34,6 +36,7 @@ class ApplicationPipelineService:
         changed_by: str,
         recruiter_id: int | None = None,
         automated: bool = False,
+        allowed_previous_statuses: Collection[ApplicationStatus] | None = None,
     ) -> Application:
         actor = cls._validate_actor(changed_by)
         if not isinstance(new_status, ApplicationStatus):
@@ -64,6 +67,12 @@ class ApplicationPipelineService:
 
             previous_status = ApplicationStatus(application.status)
             changed = previous_status != new_status
+            if (
+                changed
+                and allowed_previous_statuses is not None
+                and previous_status not in allowed_previous_statuses
+            ):
+                changed = False
             if changed:
                 cls.validate_transition(
                     previous_status=previous_status,
