@@ -21,6 +21,11 @@ export const GET_RECENT_APPLICATIONS = gql`
           name
           email
         }
+        evaluation {
+          strengths {
+            summary
+          }
+        }
         job {
           id
           title
@@ -334,6 +339,11 @@ export interface ApplicantListItem {
     name: string;
     email: string;
   };
+  evaluation: {
+    strengths: Array<{
+      summary: string;
+    }>;
+  } | null;
 }
 
 export interface JobApplicationsQueryData {
