@@ -142,7 +142,7 @@ class RecruiterApplicationQueryService:
             .select_related("recruiter")
             .order_by("created_at", "id"),
             OutreachEmail.filter(application_id=application.id).order_by(
-                "-generated_at"
+                "-generated_at", "-id"
             ),
         )
         return ApplicationDetailRecord(

@@ -241,6 +241,13 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             "AIProcessingPayload!",
             "screenJobApplicants(input: ScreenJobApplicantsInput!): "
             "BatchScreeningPayload!",
+            "generateOutreach(input: GenerateOutreachInput!): "
+            "OutreachMutationPayload!",
+            "updateOutreachDraft(input: UpdateOutreachDraftInput!): "
+            "OutreachMutationPayload!",
+            "approveOutreach(input: ApproveOutreachInput!): "
+            "OutreachMutationPayload!",
+            "sendOutreach(input: SendOutreachInput!): OutreachMutationPayload!",
         )
         for contract in expected:
             self.assertIn(contract, schema_text)

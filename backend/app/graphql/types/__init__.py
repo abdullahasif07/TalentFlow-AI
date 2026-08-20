@@ -11,6 +11,7 @@ from app.graphql.types.application import (
     CandidateDetails,
     CandidateSummary,
     EvaluationType,
+    OutreachEmailType,
     RecommendedCandidateType,
     RecommendedCandidatesResult,
     RecruiterSummary,
@@ -26,6 +27,7 @@ from app.graphql.types.common import (
     operation_error,
 )
 from app.graphql.types.job import CreateJobPayload, JobResult, JobsResult, JobSummary, JobType
+from app.graphql.types.outreach import OutreachMutationPayload
 
 __all__ = [
     "AIProcessingPayload",
@@ -50,6 +52,8 @@ __all__ = [
     "OffsetPageInfo",
     "OperationError",
     "OperationErrorCode",
+    "OutreachEmailType",
+    "OutreachMutationPayload",
     "ResumeType",
     "RecruiterSummary",
     "RecommendedCandidateType",
