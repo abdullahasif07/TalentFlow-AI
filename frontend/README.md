@@ -23,7 +23,9 @@ Open <http://localhost:3000>. The root route redirects to `/dashboard`.
 - `/dashboard` — live recruiter overview powered by the jobs GraphQL query
 - `/jobs` — searchable, status-filtered job list
 - `/jobs/[id]` — job details, requirements, and hiring statistics
-- `/candidates`, `/pipeline`, `/ai-activity` — foundation placeholder routes
+- `/jobs/[id]/applications/[applicationId]` — candidate detail, evaluation, notes, and status actions
+- `/pipeline` — job-specific hiring board with filters and recruiter-controlled drag-and-drop
+- `/candidates`, `/ai-activity` — foundation placeholder routes
 
 ## Checks
 
