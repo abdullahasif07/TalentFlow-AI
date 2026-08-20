@@ -10,6 +10,7 @@ from app.schemas.candidate_evaluation import (
     WeightedCategoryScore,
 )
 from app.schemas.job_criteria import EvaluationCategory, JobEvaluationCriteria
+from app.schemas.outreach import OutreachDraft
 from app.schemas.resume import (
     Certification,
     Education,
@@ -30,6 +31,7 @@ __all__ = [
     "EmploymentHistoryEntry",
     "JobEvaluationCriteria",
     "LLMCategoryScore",
+    "OutreachDraft",
     "ParsedResume",
     "Project",
     "RequirementAssessment",

@@ -118,6 +118,70 @@ class CandidateEvaluationProviderError(CandidateEvaluationError):
     pass
 
 
+class OutreachGenerationError(Exception):
+    """Base exception for safe, client-facing outreach generation errors."""
+
+
+class OutreachApplicationNotFoundError(OutreachGenerationError):
+    pass
+
+
+class OutreachCandidateNotFoundError(OutreachGenerationError):
+    pass
+
+
+class OutreachJobNotFoundError(OutreachGenerationError):
+    pass
+
+
+class OutreachCompanyNotFoundError(OutreachGenerationError):
+    pass
+
+
+class MissingOutreachResumeDataError(OutreachGenerationError):
+    pass
+
+
+class InvalidOutreachContextError(OutreachGenerationError):
+    pass
+
+
+class InvalidOutreachInstructionError(OutreachGenerationError):
+    pass
+
+
+class InvalidOutreachOutputError(OutreachGenerationError):
+    pass
+
+
+class OutreachGenerationProviderError(OutreachGenerationError):
+    pass
+
+
+class OutreachWorkflowError(Exception):
+    """Base exception for safe, client-facing outreach workflow errors."""
+
+
+class OutreachNotFoundError(OutreachWorkflowError):
+    pass
+
+
+class InvalidOutreachSubjectError(OutreachWorkflowError):
+    pass
+
+
+class InvalidOutreachBodyError(OutreachWorkflowError):
+    pass
+
+
+class InvalidOutreachStatusTransitionError(OutreachWorkflowError):
+    pass
+
+
+class OutreachDeliveryError(OutreachWorkflowError):
+    pass
+
+
 class AIProcessingRequestError(Exception):
     """Base exception for safe AI task-enqueue failures."""
 
