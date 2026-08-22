@@ -13,6 +13,8 @@ const statusStyles: Record<string, string> = {
   REPLIED: "border-teal-200 bg-teal-50 text-teal-700",
   INTERVIEW: "border-amber-200 bg-amber-50 text-amber-700",
   OFFER: "border-lime-200 bg-lime-50 text-lime-700",
+  APPROVED: "border-blue-200 bg-blue-50 text-blue-700",
+  SENT: "border-emerald-200 bg-emerald-50 text-emerald-700",
   HIRED: "border-emerald-200 bg-emerald-50 text-emerald-700",
   REJECTED: "border-rose-200 bg-rose-50 text-rose-700",
 };

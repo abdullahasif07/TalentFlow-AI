@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { ApplicationSidebar } from "@/components/applications/application-sidebar";
 import { CandidateInformation } from "@/components/applications/candidate-information";
 import { EvaluationPreview } from "@/components/applications/evaluation-preview";
+import { OutreachSection } from "@/components/applications/outreach/outreach-section";
 import { ResumeOverview } from "@/components/applications/resume-overview";
 import { ErrorState } from "@/components/shared/error-state";
 import { FitScore } from "@/components/shared/fit-score-badge";
@@ -216,6 +217,14 @@ export function ApplicationDetailPage({
           <EvaluationPreview
             application={application}
             onEvaluationQueued={() => refetch()}
+          />
+          <OutreachSection
+            applicationId={application.id}
+            candidateName={application.candidate.name}
+            candidateEmail={application.candidate.email}
+            jobTitle={application.job.title}
+            outreachEmails={application.outreachEmails}
+            onApplicationUpdated={() => refetch()}
           />
         </main>
 
