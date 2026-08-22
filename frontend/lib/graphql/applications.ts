@@ -1,6 +1,7 @@
 import { gql } from "@apollo/client";
 
 import type { OperationError, ProcessingState } from "@/lib/graphql/jobs";
+import { OUTREACH_EMAIL_FIELDS, type OutreachEmail } from "@/lib/graphql/outreach";
 
 export const GET_RECENT_APPLICATIONS = gql`
   query GetRecentApplications($input: ApplicationsQueryInput!) {
@@ -20,11 +21,6 @@ export const GET_RECENT_APPLICATIONS = gql`
           id
           name
           email
-        }
-        evaluation {
-          strengths {
-            summary
-          }
         }
         job {
           id
@@ -62,6 +58,11 @@ export const GET_JOB_APPLICATIONS = gql`
           id
           name
           email
+        }
+        evaluation {
+          strengths {
+            summary
+          }
         }
       }
     }
@@ -206,9 +207,13 @@ export const GET_APPLICATION_DETAIL = gql`
           createdAt
           updatedAt
         }
+        outreachEmails {
+          ...OutreachEmailFields
+        }
       }
     }
   }
+  ${OUTREACH_EMAIL_FIELDS}
 `;
 
 export const GENERATE_CANDIDATE_EVALUATION = gql`
@@ -477,6 +482,7 @@ export interface ApplicationDetail {
     createdAt: string;
   }>;
   notes: ApplicationNote[];
+  outreachEmails: OutreachEmail[];
 }
 
 export interface ApplicationNote {
