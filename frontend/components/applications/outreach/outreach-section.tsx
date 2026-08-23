@@ -1,8 +1,8 @@
 "use client";
 
 import { useApolloClient, useMutation } from "@apollo/client/react";
-import { CheckCircle2, MailPlus, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MailPlus, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { OutreachDraftEditor } from "@/components/applications/outreach/outreach-draft-editor";
 import {
@@ -10,6 +10,7 @@ import {
   OutreachHistory,
 } from "@/components/applications/outreach/outreach-email-view";
 import { OutreachGenerator } from "@/components/applications/outreach/outreach-generator";
+import { ActionFeedback } from "@/components/shared/action-feedback";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,6 +55,7 @@ export function OutreachSection({
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showNewGenerator, setShowNewGenerator] = useState(false);
+  const operationPending = useRef(false);
   const [generateOutreach] = useMutation<
     GenerateOutreachData,
     { input: { applicationId: string; instruction: string | null } }
@@ -78,6 +80,20 @@ export function OutreachSection({
   }, [successMessage]);
 
   const currentOutreach = outreachEmails[0] ?? null;
+
+  function beginAction(action: Exclude<BusyAction, null>) {
+    if (operationPending.current) return false;
+    operationPending.current = true;
+    setBusyAction(action);
+    setActionError(null);
+    setSuccessMessage(null);
+    return true;
+  }
+
+  function finishAction() {
+    operationPending.current = false;
+    setBusyAction(null);
+  }
 
   function updateOutreachCache(email: OutreachEmail) {
     client.cache.updateQuery<ApplicationDetailQueryData>(
@@ -130,9 +146,7 @@ export function OutreachSection({
   }
 
   async function handleGenerate(instruction: string | null) {
-    setBusyAction("generate");
-    setActionError(null);
-    setSuccessMessage(null);
+    if (!beginAction("generate")) return false;
     try {
       const result = await generateOutreach({
         variables: { input: { applicationId, instruction } },
@@ -159,7 +173,7 @@ export function OutreachSection({
       );
       return false;
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
@@ -178,29 +192,26 @@ export function OutreachSection({
           payload?.errors ?? [],
           "The outreach draft could not be saved.",
         );
-        return false;
+        return null;
       }
       updateOutreachCache(payload.outreach);
-      return true;
+      return payload.outreach;
     } catch (error) {
       setActionError(
         graphQLErrorMessage(error, "The outreach draft could not be saved."),
       );
-      return false;
+      return null;
     }
   }
 
   async function handleSave(subject: string, body: string) {
-    if (!currentOutreach) return false;
-    setBusyAction("save");
-    setActionError(null);
-    setSuccessMessage(null);
+    if (!currentOutreach || !beginAction("save")) return null;
     try {
       const saved = await saveDraftRequest(currentOutreach.id, subject, body);
       if (saved) setSuccessMessage("Draft saved.");
       return saved;
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
@@ -209,10 +220,7 @@ export function OutreachSection({
     body: string,
     hasUnsavedChanges: boolean,
   ) {
-    if (!currentOutreach) return false;
-    setBusyAction("approve");
-    setActionError(null);
-    setSuccessMessage(null);
+    if (!currentOutreach || !beginAction("approve")) return false;
     try {
       if (hasUnsavedChanges) {
         const saved = await saveDraftRequest(currentOutreach.id, subject, body);
@@ -238,7 +246,7 @@ export function OutreachSection({
       );
       return false;
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
@@ -248,9 +256,7 @@ export function OutreachSection({
       setActionError("This candidate has no email address.");
       return false;
     }
-    setBusyAction("send");
-    setActionError(null);
-    setSuccessMessage(null);
+    if (!beginAction("send")) return false;
     try {
       const result = await sendOutreach({
         variables: { input: { outreachId: currentOutreach.id } },
@@ -282,7 +288,7 @@ export function OutreachSection({
       );
       return false;
     } finally {
-      setBusyAction(null);
+      finishAction();
     }
   }
 
@@ -313,21 +319,10 @@ export function OutreachSection({
         </div>
 
         {actionError ? (
-          <div
-            role="alert"
-            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-          >
-            {actionError}
-          </div>
+          <ActionFeedback variant="error" message={actionError} />
         ) : null}
         {successMessage ? (
-          <div
-            role="status"
-            className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
-          >
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            {successMessage}
-          </div>
+          <ActionFeedback variant="success" message={successMessage} />
         ) : null}
 
         {!currentOutreach ? (

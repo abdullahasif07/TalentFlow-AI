@@ -23,7 +23,7 @@ export function OutreachDraftEditor({
 }: {
   email: OutreachEmail;
   busyAction: string | null;
-  onSave: (subject: string, body: string) => Promise<boolean>;
+  onSave: (subject: string, body: string) => Promise<OutreachEmail | null>;
   onRegenerate: (instruction: string | null) => Promise<boolean>;
   onApprove: (subject: string, body: string, hasUnsavedChanges: boolean) => Promise<boolean>;
 }) {
@@ -140,7 +140,13 @@ export function OutreachDraftEditor({
             variant="outline"
             disabled={busy || !dirty}
             onClick={() => {
-              if (validateDraft()) void onSave(subject.trim(), body.trim());
+              if (validateDraft()) {
+                void onSave(subject.trim(), body.trim()).then((saved) => {
+                  if (!saved) return;
+                  setSubject(saved.subject);
+                  setBody(saved.body);
+                });
+              }
             }}
           >
             {busyAction === "save" ? (
