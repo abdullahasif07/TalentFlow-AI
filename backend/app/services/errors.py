@@ -118,6 +118,58 @@ class CandidateEvaluationProviderError(CandidateEvaluationError):
     pass
 
 
+class CandidateComparisonError(Exception):
+    """Base exception for safe, client-facing candidate comparison errors."""
+
+
+class CandidateComparisonApplicationError(CandidateComparisonError):
+    """Comparison failure associated with one or more selected applications."""
+
+    def __init__(self, message: str, application_ids: list[int]) -> None:
+        super().__init__(message)
+        self.application_ids = tuple(application_ids)
+
+
+class ComparisonJobNotFoundError(CandidateComparisonError):
+    pass
+
+
+class ComparisonApplicationNotFoundError(CandidateComparisonApplicationError):
+    pass
+
+
+class InvalidCandidateComparisonInputError(CandidateComparisonError):
+    pass
+
+
+class ComparisonJobMismatchError(CandidateComparisonApplicationError):
+    pass
+
+
+class MissingCandidateEvaluationError(CandidateComparisonApplicationError):
+    pass
+
+
+class IncompleteCandidateComparisonDataError(CandidateComparisonApplicationError):
+    pass
+
+
+class MissingComparisonJobCriteriaError(CandidateComparisonError):
+    pass
+
+
+class InvalidCandidateComparisonOutputError(CandidateComparisonError):
+    pass
+
+
+class CandidateComparisonProviderError(CandidateComparisonError):
+    pass
+
+
+class CandidateComparisonDataAccessError(CandidateComparisonError):
+    pass
+
+
 class OutreachGenerationError(Exception):
     """Base exception for safe, client-facing outreach generation errors."""
 

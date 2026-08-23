@@ -1,3 +1,10 @@
+from app.schemas.candidate_comparison import (
+    CandidateComparison,
+    CandidateTradeoffSummary,
+    ComparisonCandidateSummary,
+    CriteriaCandidateComparison,
+    CriteriaComparison,
+)
 from app.schemas.candidate_evaluation import (
     CandidateEvaluation,
     CandidateEvaluationAnalysis,
@@ -22,7 +29,12 @@ from app.schemas.resume import (
 __all__ = [
     "CandidateEvaluation",
     "CandidateEvaluationAnalysis",
+    "CandidateComparison",
+    "CandidateTradeoffSummary",
     "Certification",
+    "ComparisonCandidateSummary",
+    "CriteriaCandidateComparison",
+    "CriteriaComparison",
     "Education",
     "EvaluationEvidence",
     "EvaluationCategory",

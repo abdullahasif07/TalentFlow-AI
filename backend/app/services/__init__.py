@@ -1,3 +1,4 @@
+from app.services.ai.candidate_comparison import CandidateComparisonService
 from app.services.ai.candidate_evaluation import CandidateEvaluationService
 from app.services.ai.job_criteria import JobCriteriaService
 from app.services.ai.outreach_generation import OutreachGenerationService
@@ -17,6 +18,7 @@ from app.services.resume_storage import ResumeStorageService
 __all__ = [
     "AIProcessingService",
     "CandidateEvaluationService",
+    "CandidateComparisonService",
     "ApplicationService",
     "ApplicationNoteService",
     "ApplicationPipelineService",
