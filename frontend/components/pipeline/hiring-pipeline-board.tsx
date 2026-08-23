@@ -14,17 +14,17 @@ import {
 import { useMutation, useQuery } from "@apollo/client/react";
 import {
   ArchiveX,
-  CheckCircle2,
   ChevronDown,
   Columns3,
   FilterX,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PipelineCard } from "@/components/pipeline/pipeline-card";
 import { PipelineColumn } from "@/components/pipeline/pipeline-column";
+import { ActionFeedback } from "@/components/shared/action-feedback";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { Button } from "@/components/ui/button";
@@ -134,6 +134,7 @@ export function HiringPipelineBoard() {
     Record<string, ApplicationStatus>
   >({});
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const pendingIdsRef = useRef<Set<string>>(new Set());
   const [activeApplicationId, setActiveApplicationId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -202,12 +203,14 @@ export function HiringPipelineBoard() {
   >(UPDATE_APPLICATION_STATUS);
 
   const applications = useMemo(() => {
-    const items = (applicationsQuery.data?.applications.items ?? []).map(
-      (application) => ({
+    const uniqueItems = new Map<string, ApplicantListItem>();
+    for (const application of applicationsQuery.data?.applications.items ?? []) {
+      uniqueItems.set(application.id, {
         ...application,
         status: statusOverrides[application.id] ?? application.status,
-      }),
-    );
+      });
+    }
+    const items = [...uniqueItems.values()];
     if (evaluationFilter === "EVALUATED") {
       return items.filter(
         (application) => application.evaluationProcessingState === "COMPLETED",
@@ -258,8 +261,9 @@ export function HiringPipelineBoard() {
     if (!application || !isPipelineStatus(destination)) return;
 
     const previousStatus = application.status;
-    if (previousStatus === destination || pendingIds.has(applicationId)) return;
+    if (previousStatus === destination || pendingIdsRef.current.has(applicationId)) return;
 
+    pendingIdsRef.current.add(applicationId);
     setStatusOverrides((current) => ({ ...current, [applicationId]: destination }));
     setPendingIds((current) => new Set(current).add(applicationId));
     setActionError(null);
@@ -273,17 +277,6 @@ export function HiringPipelineBoard() {
             status: destination,
             changedBy: CURRENT_RECRUITER,
             automated: false,
-          },
-        },
-        optimisticResponse: {
-          updateApplicationStatus: {
-            success: true,
-            application: {
-              id: applicationId,
-              status: destination,
-              updatedAt: new Date().toISOString(),
-            },
-            errors: [],
           },
         },
         update(cache, mutationResult) {
@@ -370,6 +363,7 @@ export function HiringPipelineBoard() {
         graphQLErrorMessage(error, "The application could not be moved. Try again."),
       );
     } finally {
+      pendingIdsRef.current.delete(applicationId);
       setPendingIds((current) => {
         const next = new Set(current);
         next.delete(applicationId);
@@ -433,8 +427,6 @@ export function HiringPipelineBoard() {
               value={selectedJobId}
               onChange={(event) => {
                 setRequestedJobId(event.target.value);
-                setStatusOverrides({});
-                setPendingIds(new Set());
                 setActionError(null);
                 setSuccessMessage(null);
                 setActiveApplicationId(null);
@@ -543,20 +535,10 @@ export function HiringPipelineBoard() {
       </div>
 
       {actionError ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-        >
-          {actionError}
-        </div>
+        <ActionFeedback variant="error" message={actionError} />
       ) : null}
       {successMessage ? (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
-        >
-          <CheckCircle2 className="size-4" /> {successMessage}
-        </div>
+        <ActionFeedback variant="success" message={successMessage} />
       ) : null}
 
       {initialApplicationsLoading ? <PipelineColumnsLoading /> : null}

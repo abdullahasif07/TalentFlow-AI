@@ -104,18 +104,19 @@ export function PipelineCard({
       style={style}
       role="link"
       tabIndex={overlay ? -1 : 0}
+      aria-disabled={pending || undefined}
       aria-label={`Open ${application.candidate.name}'s application`}
       onClick={() => {
-        if (!isDragging && !overlay) router.push(detailUrl);
+        if (!isDragging && !overlay && !pending) router.push(detailUrl);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter" && !overlay) router.push(detailUrl);
+        if (event.key === "Enter" && !overlay && !pending) router.push(detailUrl);
       }}
       className={cn(
         "rounded-xl border bg-card p-3.5 shadow-[0_1px_2px_rgba(23,32,51,0.04)] outline-none transition-[border-color,box-shadow,opacity]",
         !overlay && "cursor-pointer hover:border-primary/30 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring/20",
         isDragging && "opacity-30",
-        pending && "opacity-70",
+        pending && "cursor-wait opacity-70",
         overlay && "w-[286px] rotate-1 border-primary/30 shadow-xl",
       )}
     >
