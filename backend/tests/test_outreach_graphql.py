@@ -16,6 +16,7 @@ from app.db.models import (
 )
 from app.enums import ApplicationStatus, JobStatus, OutreachStatus
 from app.graphql.schema import schema
+from app.services import ApplicationPipelineService
 from app.services.errors import OutreachApplicationNotFoundError
 
 
@@ -184,6 +185,61 @@ class OutreachGraphQLTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(history[-1].previous_status, ApplicationStatus.HUMAN_REVIEW)
         self.assertEqual(history[-1].new_status, ApplicationStatus.CONTACTED)
         self.assertEqual(history[-1].changed_by, "Outreach email sent")
+
+    async def test_repeated_send_is_rejected_without_duplicate_status_history(self) -> None:
+        outreach = await self.create_outreach(status=OutreachStatus.APPROVED)
+
+        first_send = await self.run_mutation(
+            "sendOutreach",
+            "SendOutreachInput",
+            {"outreachId": str(outreach.id)},
+        )
+        history_count = await ApplicationStatusHistory.filter(
+            application_id=self.application.id
+        ).count()
+        second_send = await self.run_mutation(
+            "sendOutreach",
+            "SendOutreachInput",
+            {"outreachId": str(outreach.id)},
+        )
+
+        self.assertTrue(first_send["success"])
+        self.assertFalse(second_send["success"])
+        self.assertEqual(second_send["errors"][0]["code"], "CONFLICT")
+        self.assertEqual(
+            await ApplicationStatusHistory.filter(
+                application_id=self.application.id
+            ).count(),
+            history_count,
+        )
+
+    async def test_shortlisted_application_moves_to_contacted_after_send(self) -> None:
+        await ApplicationPipelineService.update_status(
+            application_id=self.application.id,
+            new_status=ApplicationStatus.SHORTLISTED,
+            changed_by="Alex Morgan",
+        )
+        outreach = await self.create_outreach(status=OutreachStatus.APPROVED)
+
+        sent = await self.run_mutation(
+            "sendOutreach",
+            "SendOutreachInput",
+            {"outreachId": str(outreach.id)},
+        )
+
+        self.assertTrue(sent["success"])
+        await self.application.refresh_from_db()
+        self.assertEqual(self.application.status, ApplicationStatus.CONTACTED)
+        history = await ApplicationStatusHistory.filter(
+            application_id=self.application.id
+        ).order_by("created_at", "id")
+        self.assertEqual(
+            [(item.previous_status, item.new_status) for item in history[-2:]],
+            [
+                (ApplicationStatus.HUMAN_REVIEW, ApplicationStatus.SHORTLISTED),
+                (ApplicationStatus.SHORTLISTED, ApplicationStatus.CONTACTED),
+            ],
+        )
 
     async def test_unapproved_or_sent_outreach_cannot_be_modified_incorrectly(self) -> None:
         draft = await self.create_outreach()
