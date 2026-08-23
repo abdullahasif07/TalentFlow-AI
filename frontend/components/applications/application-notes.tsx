@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation } from "@apollo/client/react";
-import { CheckCircle2, LoaderCircle, MessageSquarePlus, Send } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { LoaderCircle, MessageSquarePlus, Send } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { ActionFeedback } from "@/components/shared/action-feedback";
 import { Button } from "@/components/ui/button";
 import {
   ADD_APPLICATION_NOTE,
@@ -29,7 +30,9 @@ export function ApplicationNotes({
   const [content, setContent] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [addNote, { loading }] = useMutation<
+  const [submitting, setSubmitting] = useState(false);
+  const submissionPending = useRef(false);
+  const [addNote] = useMutation<
     AddApplicationNoteData,
     { input: { applicationId: string; content: string } }
   >(ADD_APPLICATION_NOTE);
@@ -43,11 +46,14 @@ export function ApplicationNotes({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedContent = content.trim();
+    if (submissionPending.current) return;
     if (!normalizedContent) {
       setActionError("Enter a note before submitting.");
       return;
     }
 
+    submissionPending.current = true;
+    setSubmitting(true);
     setActionError(null);
     setSuccessMessage(null);
 
@@ -97,6 +103,9 @@ export function ApplicationNotes({
       setSuccessMessage("Note added.");
     } catch (error) {
       setActionError(graphQLErrorMessage(error, "The note could not be added."));
+    } finally {
+      submissionPending.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -121,7 +130,7 @@ export function ApplicationNotes({
           }}
           rows={3}
           maxLength={MAX_NOTE_LENGTH}
-          disabled={loading}
+          disabled={submitting}
           placeholder="Add private context for the recruiting team…"
           className="min-h-24 w-full resize-y rounded-lg border border-input bg-card px-3 py-2.5 text-sm leading-6 outline-none transition-shadow placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/15 disabled:cursor-not-allowed disabled:opacity-60"
         />
@@ -135,20 +144,24 @@ export function ApplicationNotes({
           >
             {remainingCharacters.toLocaleString()} characters remaining
           </span>
-          <Button size="sm" type="submit" disabled={loading || !content.trim()}>
-            {loading ? <LoaderCircle className="animate-spin" /> : <Send />}
-            {loading ? "Adding…" : "Add Note"}
+          <Button size="sm" type="submit" disabled={submitting || !content.trim()}>
+            {submitting ? <LoaderCircle className="animate-spin" /> : <Send />}
+            {submitting ? "Adding…" : "Add Note"}
           </Button>
         </div>
         {successMessage ? (
-          <p role="status" className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
-            <CheckCircle2 className="size-3.5" /> {successMessage}
-          </p>
+          <ActionFeedback
+            variant="success"
+            message={successMessage}
+            className="rounded-lg px-3 py-2 text-xs font-medium"
+          />
         ) : null}
         {actionError ? (
-          <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium leading-5 text-rose-800">
-            {actionError}
-          </p>
+          <ActionFeedback
+            variant="error"
+            message={actionError}
+            className="rounded-lg px-3 py-2 text-xs font-medium"
+          />
         ) : null}
       </form>
 

@@ -9,8 +9,9 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { ActionFeedback } from "@/components/shared/action-feedback";
 import { Button } from "@/components/ui/button";
 import {
   APPLICATION_STATUSES,
@@ -63,14 +64,20 @@ export function ApplicationStatusControl({
   currentStatus,
   onStatusUpdated,
 }: ApplicationStatusControlProps) {
-  const [selectedStatus, setSelectedStatus] = useState<ApplicationStatus>(
-    suggestedNextStatus[currentStatus] ?? currentStatus,
-  );
-  const [confirmationStatus, setConfirmationStatus] =
-    useState<ApplicationStatus | null>(null);
+  const [statusSelection, setStatusSelection] = useState(() => ({
+    forStatus: currentStatus,
+    value: suggestedNextStatus[currentStatus] ?? currentStatus,
+  }));
+  const [confirmation, setConfirmation] = useState<{
+    forStatus: ApplicationStatus;
+    value: ApplicationStatus;
+  } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [updateStatus, { loading }] = useMutation<
+  const [retryableStatusUpdate, setRetryableStatusUpdate] = useState(false);
+  const [operationLoading, setOperationLoading] = useState(false);
+  const operationPending = useRef(false);
+  const [updateStatus] = useMutation<
     UpdateApplicationStatusData,
     {
       input: {
@@ -81,6 +88,20 @@ export function ApplicationStatusControl({
       };
     }
   >(UPDATE_APPLICATION_STATUS);
+  const selectedStatus =
+    statusSelection.forStatus === currentStatus
+      ? statusSelection.value
+      : (suggestedNextStatus[currentStatus] ?? currentStatus);
+  const confirmationStatus =
+    confirmation?.forStatus === currentStatus ? confirmation.value : null;
+
+  function selectStatus(status: ApplicationStatus) {
+    setStatusSelection({ forStatus: currentStatus, value: status });
+  }
+
+  function confirmStatus(status: ApplicationStatus | null) {
+    setConfirmation(status ? { forStatus: currentStatus, value: status } : null);
+  }
 
   useEffect(() => {
     if (!successMessage) return;
@@ -89,8 +110,12 @@ export function ApplicationStatusControl({
   }, [successMessage]);
 
   async function persistStatus(status: ApplicationStatus) {
+    if (operationPending.current) return;
+    operationPending.current = true;
+    setOperationLoading(true);
     setActionError(null);
     setSuccessMessage(null);
+    setRetryableStatusUpdate(false);
 
     try {
       const result = await updateStatus({
@@ -150,9 +175,9 @@ export function ApplicationStatusControl({
                 },
               });
             }
+            cache.evict({ id: "ROOT_QUERY", fieldName: "applications" });
+            cache.evict({ id: "ROOT_QUERY", fieldName: "recommendedCandidates" });
           }
-          cache.evict({ id: "ROOT_QUERY", fieldName: "applications" });
-          cache.evict({ id: "ROOT_QUERY", fieldName: "recommendedCandidates" });
         },
       });
       const payload = result.data?.updateApplicationStatus;
@@ -161,32 +186,39 @@ export function ApplicationStatusControl({
         setActionError(
           payload?.errors[0]?.message ?? "The application status could not be updated.",
         );
+        setRetryableStatusUpdate(true);
         return;
       }
 
-      setConfirmationStatus(null);
-      setSelectedStatus(
-        suggestedNextStatus[payload.application.status] ?? payload.application.status,
-      );
+      setConfirmation(null);
+      setStatusSelection({
+        forStatus: payload.application.status,
+        value:
+          suggestedNextStatus[payload.application.status] ?? payload.application.status,
+      });
       setSuccessMessage(`Moved to ${formatApplicationStatus(payload.application.status)}.`);
       try {
         await onStatusUpdated();
       } catch {
         setActionError(
-          "The status was updated, but the latest timeline could not be loaded. Refresh the page to try again.",
+          "The status was updated, but the latest timeline could not be loaded. Reopen this application to refresh its activity.",
         );
       }
     } catch (error) {
       setActionError(
         graphQLErrorMessage(error, "The application status could not be updated."),
       );
+      setRetryableStatusUpdate(true);
+    } finally {
+      operationPending.current = false;
+      setOperationLoading(false);
     }
   }
 
   function requestStatusUpdate(status: ApplicationStatus) {
-    if (status === currentStatus || loading) return;
+    if (status === currentStatus || operationLoading) return;
     if (confirmationStatuses.has(status)) {
-      setConfirmationStatus(status);
+      confirmStatus(status);
       return;
     }
     void persistStatus(status);
@@ -212,11 +244,11 @@ export function ApplicationStatusControl({
             id="application-status"
             value={selectedStatus}
             onChange={(event) => {
-              setSelectedStatus(event.target.value as ApplicationStatus);
-              setConfirmationStatus(null);
+              selectStatus(event.target.value as ApplicationStatus);
+              setConfirmation(null);
               setActionError(null);
             }}
-            disabled={loading}
+            disabled={operationLoading}
             className="h-10 w-full appearance-none rounded-lg border border-input bg-card px-3 pr-9 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-ring/15 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {APPLICATION_STATUSES.map((status) => (
@@ -264,16 +296,16 @@ export function ApplicationStatusControl({
               size="sm"
               variant={confirmationStatus === "REJECTED" ? "destructive" : "default"}
               onClick={() => void persistStatus(confirmationStatus)}
-              disabled={loading}
+              disabled={operationLoading}
             >
-              {loading ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}
+              {operationLoading ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}
               Confirm
             </Button>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setConfirmationStatus(null)}
-              disabled={loading}
+              onClick={() => setConfirmation(null)}
+              disabled={operationLoading}
             >
               Cancel
             </Button>
@@ -284,10 +316,10 @@ export function ApplicationStatusControl({
           <Button
             className="min-w-0 flex-1"
             onClick={() => requestStatusUpdate(selectedStatus)}
-            disabled={isCurrentStage || loading}
+            disabled={isCurrentStage || operationLoading}
           >
-            {loading ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}
-            <span className="truncate">{loading ? "Updating…" : actionLabel}</span>
+            {operationLoading ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}
+            <span className="truncate">{operationLoading ? "Updating…" : actionLabel}</span>
           </Button>
           {!isRejected && !isHired && selectedStatus !== "REJECTED" ? (
             <Button
@@ -295,10 +327,10 @@ export function ApplicationStatusControl({
               variant="outline"
               className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
               onClick={() => {
-                setSelectedStatus("REJECTED");
-                setConfirmationStatus("REJECTED");
+                selectStatus("REJECTED");
+                confirmStatus("REJECTED");
               }}
-              disabled={loading}
+              disabled={operationLoading}
               aria-label="Reject application"
               title="Reject application"
             >
@@ -309,25 +341,30 @@ export function ApplicationStatusControl({
       )}
 
       {successMessage ? (
-        <p
-          role="status"
-          className="flex items-center gap-1.5 text-xs font-medium text-emerald-700"
-        >
-          <CheckCircle2 className="size-3.5" /> {successMessage}
-        </p>
+        <ActionFeedback
+          variant="success"
+          message={successMessage}
+          className="rounded-lg px-3 py-2 text-xs font-medium"
+        />
       ) : null}
       {actionError ? (
-        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3">
-          <p className="text-xs font-medium text-rose-800">{actionError}</p>
-          <button
-            type="button"
-            className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-rose-800 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-            onClick={() => void persistStatus(selectedStatus)}
-            disabled={loading}
-          >
-            <RotateCcw className="size-3" /> Try again
-          </button>
-        </div>
+        <ActionFeedback
+          variant="error"
+          message={actionError}
+          className="rounded-lg px-3 py-2 text-xs font-medium"
+          action={
+            retryableStatusUpdate ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+                onClick={() => void persistStatus(selectedStatus)}
+                disabled={operationLoading}
+              >
+                <RotateCcw className="size-3" /> Try again
+              </button>
+            ) : undefined
+          }
+        />
       ) : null}
       <p className="text-[11px] leading-4 text-muted-foreground">
         Status changes are manual and do not depend on the AI fit score.
