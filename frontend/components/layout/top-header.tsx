@@ -15,6 +15,9 @@ const routeTitles: Record<string, { title: string; eyebrow: string }> = {
 };
 
 function getRouteTitle(pathname: string) {
+  if (/^\/jobs\/[^/]+\/compare$/.test(pathname)) {
+    return { title: "Candidate comparison", eyebrow: "Jobs / Applicants / Compare" };
+  }
   if (/^\/jobs\/[^/]+\/applications\/[^/]+$/.test(pathname)) {
     return { title: "Application details", eyebrow: "Jobs / Applicants / Application" };
   }
