@@ -248,6 +248,8 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             "approveOutreach(input: ApproveOutreachInput!): "
             "OutreachMutationPayload!",
             "sendOutreach(input: SendOutreachInput!): OutreachMutationPayload!",
+            "compareCandidates(input: CompareCandidatesInput!): "
+            "CandidateComparisonResult!",
         )
         for contract in expected:
             self.assertIn(contract, schema_text)
