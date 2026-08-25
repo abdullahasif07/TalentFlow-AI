@@ -51,8 +51,15 @@ class ComparisonCandidateSummary(CandidateComparisonSchema):
 
 class CriteriaCandidateComparison(CandidateComparisonSchema):
     application_id: int = Field(gt=0)
-    score: float = Field(ge=0, le=100)
+    available: bool
+    score: float | None = Field(default=None, ge=0, le=100)
     summary: str = Field(min_length=1, max_length=2_000)
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> "CriteriaCandidateComparison":
+        if self.available != (self.score is not None):
+            raise ValueError("category availability must match score presence")
+        return self
 
 
 class CriteriaComparison(CandidateComparisonSchema):

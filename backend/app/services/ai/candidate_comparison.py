@@ -300,10 +300,12 @@ class CandidateComparisonService:
             category.name.strip().casefold()
             for category in criteria.evaluation_categories
         }
-        if set(scores_by_name) != expected_names:
-            raise ValueError("stored evaluation categories do not match the job rubric")
+        if not set(scores_by_name).issubset(expected_names):
+            raise ValueError("stored evaluation contains categories outside the job rubric")
         for category in criteria.evaluation_categories:
-            stored_category = scores_by_name[category.name.strip().casefold()]
+            stored_category = scores_by_name.get(category.name.strip().casefold())
+            if stored_category is None:
+                continue
             if stored_category.weight != category.weight:
                 raise ValueError("stored evaluation weights do not match the job rubric")
         return evaluation
@@ -339,13 +341,30 @@ class CandidateComparisonService:
             candidates: list[CriteriaCandidateComparison] = []
             for item in applications:
                 category = next(
-                    score
-                    for score in item.evaluation.category_scores
-                    if score.name.strip().casefold() == category_key
+                    (
+                        score
+                        for score in item.evaluation.category_scores
+                        if score.name.strip().casefold() == category_key
+                    ),
+                    None,
                 )
+                if category is None:
+                    candidates.append(
+                        CriteriaCandidateComparison(
+                            application_id=item.application.id,
+                            available=False,
+                            score=None,
+                            summary=(
+                                "No stored evaluation score is available for this "
+                                "category."
+                            ),
+                        )
+                    )
+                    continue
                 candidates.append(
                     CriteriaCandidateComparison(
                         application_id=item.application.id,
+                        available=True,
                         score=category.score,
                         summary=category.rationale,
                     )

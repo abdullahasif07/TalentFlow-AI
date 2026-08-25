@@ -246,6 +246,7 @@ class CandidateComparisonTests(unittest.IsolatedAsyncioTestCase):
         await Resume.create(
             candidate=candidate,
             file_url=f"uploads/resumes/{candidate.id}/resume.pdf",
+            raw_text="UNNECESSARY_RAW_RESUME_TEXT",
             parsed_data=parsed_resume(index),
             processing_state=AIProcessingState.COMPLETED,
         )
@@ -299,8 +300,14 @@ class CandidateComparisonTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(client.calls[0]["response_model"], CandidateTradeoffSummary)
         input_text = str(client.calls[0]["input_text"])
+        instructions = str(client.calls[0]["instructions"])
         self.assertNotIn("Display Candidate", input_text)
-        self.assertIn("protected or personal attribute", str(client.calls[0]["instructions"]))
+        self.assertNotIn("@example.com", input_text)
+        self.assertNotIn("UNNECESSARY_RAW_RESUME_TEXT", input_text)
+        self.assertIn("Never invent qualifications", instructions)
+        self.assertIn("merely absent from a resume", instructions)
+        self.assertIn("protected or personal attribute", instructions)
+        self.assertIn("Do not recommend hiring or rejecting", instructions)
 
     async def test_compares_five_applications(self) -> None:
         comparison, _ = await self.compare(self.applications)
@@ -379,6 +386,53 @@ class CandidateComparisonTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             comparison.criteria_comparison[0].candidates[0].score,
             90.0,
+        )
+        self.assertTrue(
+            comparison.criteria_comparison[0].candidates[0].available
+        )
+
+    async def test_missing_category_is_explicitly_unavailable(self) -> None:
+        application = self.applications[1]
+        evaluation = await AIEvaluation.get(application_id=application.id)
+        analysis = dict(evaluation.analysis_json)
+        analysis["category_scores"] = analysis["category_scores"][:1]
+        evaluation.analysis_json = analysis
+        await evaluation.save(update_fields=["analysis_json", "updated_at"])
+
+        comparison, _ = await self.compare(self.applications[:2])
+
+        relevant_experience = comparison.criteria_comparison[1]
+        available, unavailable = relevant_experience.candidates
+        self.assertTrue(available.available)
+        self.assertIsNotNone(available.score)
+        self.assertFalse(unavailable.available)
+        self.assertIsNone(unavailable.score)
+        self.assertIn("No stored evaluation score", unavailable.summary)
+
+    async def test_identical_and_different_scores_are_preserved(self) -> None:
+        different, _ = await self.compare(self.applications[:2])
+        different_scores = [
+            candidate.overall_score for candidate in different.candidates
+        ]
+        self.assertNotEqual(different_scores[0], different_scores[1])
+
+        first_evaluation = await AIEvaluation.get(
+            application_id=self.applications[0].id
+        )
+        second_evaluation = await AIEvaluation.get(
+            application_id=self.applications[1].id
+        )
+        second_evaluation.overall_score = first_evaluation.overall_score
+        second_evaluation.analysis_json = dict(first_evaluation.analysis_json)
+        await second_evaluation.save(
+            update_fields=["overall_score", "analysis_json", "updated_at"]
+        )
+
+        identical, _ = await self.compare(self.applications[:2])
+
+        self.assertEqual(
+            identical.candidates[0].overall_score,
+            identical.candidates[1].overall_score,
         )
 
     async def test_llm_cannot_add_or_overwrite_score_fields(self) -> None:
@@ -467,6 +521,75 @@ class CandidateComparisonTests(unittest.IsolatedAsyncioTestCase):
             incomplete.exception.application_ids,
             (self.applications[1].id,),
         )
+
+    async def test_missing_resume_data_is_cleanly_reported(self) -> None:
+        resume = await Resume.get(candidate_id=self.applications[1].candidate_id)
+        resume.parsed_data = {}
+        await resume.save(update_fields=["parsed_data", "updated_at"])
+
+        with self.assertRaises(IncompleteCandidateComparisonDataError) as raised:
+            await CandidateComparisonService(
+                client=MockStructuredOutputClient({})
+            ).compare(
+                job_id=self.job.id,
+                application_ids=[
+                    self.applications[0].id,
+                    self.applications[1].id,
+                ],
+            )
+
+        self.assertEqual(
+            raised.exception.application_ids,
+            (self.applications[1].id,),
+        )
+
+    async def test_missing_evaluation_record_is_cleanly_reported(self) -> None:
+        application = self.applications[1]
+        await AIEvaluation.filter(application_id=application.id).delete()
+
+        with self.assertRaises(MissingCandidateEvaluationError) as raised:
+            await CandidateComparisonService(
+                client=MockStructuredOutputClient({})
+            ).compare(
+                job_id=self.job.id,
+                application_ids=[self.applications[0].id, application.id],
+            )
+
+        self.assertEqual(raised.exception.application_ids, (application.id,))
+
+    async def test_deleting_candidate_cascades_to_missing_application(self) -> None:
+        application = self.applications[1]
+        application_id = application.id
+        await Candidate.filter(id=application.candidate_id).delete()
+
+        self.assertFalse(await Application.exists(id=application_id))
+        with self.assertRaises(ComparisonApplicationNotFoundError) as raised:
+            await CandidateComparisonService(
+                client=MockStructuredOutputClient({})
+            ).compare(
+                job_id=self.job.id,
+                application_ids=[self.applications[0].id, application_id],
+            )
+
+        self.assertEqual(raised.exception.application_ids, (application_id,))
+
+    async def test_comparison_uses_four_fixed_database_queries(self) -> None:
+        connection = Tortoise.get_connection("default")
+        original_execute_query = connection.execute_query
+        query_count = 0
+
+        async def counting_execute_query(*args, **kwargs):
+            nonlocal query_count
+            query_count += 1
+            return await original_execute_query(*args, **kwargs)
+
+        connection.execute_query = counting_execute_query
+        try:
+            await self.compare(self.applications)
+        finally:
+            connection.execute_query = original_execute_query
+
+        self.assertEqual(query_count, 4)
 
     async def test_application_count_bounds_are_enforced(self) -> None:
         with self.assertRaisesRegex(
