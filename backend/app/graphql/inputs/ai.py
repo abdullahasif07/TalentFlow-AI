@@ -25,3 +25,9 @@ class ScreenJobApplicantsInput:
 class RecommendedCandidatesInput:
     job_id: strawberry.ID
     limit: int = 5
+
+
+@strawberry.input
+class CompareCandidatesInput:
+    job_id: strawberry.ID
+    application_ids: list[strawberry.ID]

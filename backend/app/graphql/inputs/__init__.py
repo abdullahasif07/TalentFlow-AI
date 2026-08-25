@@ -8,6 +8,7 @@ from app.graphql.inputs.application import (
     UpdateApplicationStatusInput,
 )
 from app.graphql.inputs.ai import (
+    CompareCandidatesInput,
     GenerateCandidateEvaluationInput,
     GenerateJobCriteriaInput,
     ProcessApplicationResumeInput,
@@ -31,6 +32,7 @@ __all__ = [
     "ApproveOutreachInput",
     "BulkUpdateApplicationStatusInput",
     "CreateJobInput",
+    "CompareCandidatesInput",
     "GenerateCandidateEvaluationInput",
     "GenerateJobCriteriaInput",
     "GenerateOutreachInput",

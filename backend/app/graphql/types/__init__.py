@@ -26,6 +26,14 @@ from app.graphql.types.common import (
     OperationErrorCode,
     operation_error,
 )
+from app.graphql.types.comparison import (
+    CandidateCategoryResultType,
+    CandidateComparisonResult,
+    CandidateComparisonSummaryType,
+    ComparedCandidateType,
+    ComparisonCategoryType,
+    ComparisonJobType,
+)
 from app.graphql.types.job import CreateJobPayload, JobResult, JobsResult, JobSummary, JobType
 from app.graphql.types.outreach import OutreachMutationPayload
 
@@ -42,7 +50,13 @@ __all__ = [
     "BulkUpdateApplicationStatusPayload",
     "BatchScreeningPayload",
     "CandidateDetails",
+    "CandidateCategoryResultType",
+    "CandidateComparisonResult",
+    "CandidateComparisonSummaryType",
     "CandidateSummary",
+    "ComparedCandidateType",
+    "ComparisonCategoryType",
+    "ComparisonJobType",
     "CreateJobPayload",
     "EvaluationType",
     "JobResult",

@@ -3,6 +3,7 @@ import strawberry
 from app.graphql.mutations import (
     AIProcessingMutation,
     ApplicationMutation,
+    CandidateComparisonMutation,
     JobMutation,
     OutreachMutation,
 )
@@ -15,7 +16,13 @@ class Query(JobQuery, ApplicationQuery):
 
 
 @strawberry.type
-class Mutation(AIProcessingMutation, JobMutation, ApplicationMutation, OutreachMutation):
+class Mutation(
+    AIProcessingMutation,
+    CandidateComparisonMutation,
+    JobMutation,
+    ApplicationMutation,
+    OutreachMutation,
+):
     pass
 
 
