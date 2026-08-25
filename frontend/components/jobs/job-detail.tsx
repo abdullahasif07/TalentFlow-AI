@@ -179,7 +179,9 @@ export function JobDetail({ jobId }: { jobId: string }) {
         </div>
 
         <div role="tabpanel">
-          {activeTab === "APPLICANTS" ? <JobApplicants jobId={jobId} /> : null}
+          {activeTab === "APPLICANTS" ? (
+            <JobApplicants key={jobId} jobId={jobId} />
+          ) : null}
           {activeTab === "RECOMMENDED" ? <RecommendedCandidates jobId={jobId} /> : null}
           {activeTab === "DETAILS" ? <JobInformation job={job} /> : null}
         </div>

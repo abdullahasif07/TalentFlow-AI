@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Scale,
   Search,
   UserRoundSearch,
 } from "lucide-react";
@@ -35,6 +36,13 @@ import {
 import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import { formatDate } from "@/lib/graphql/jobs";
 import { cn } from "@/lib/utils";
+import {
+  MAX_COMPARISON_CANDIDATES,
+  buildComparisonUrl,
+  canCompareCandidates,
+  clearComparisonSelection,
+  updateComparisonSelection,
+} from "@/lib/comparison-selection";
 
 const PAGE_SIZE = 10;
 
@@ -63,6 +71,14 @@ export function JobApplicants({ jobId }: { jobId: string }) {
   const [status, setStatus] = useState("ALL");
   const [sort, setSort] = useState<ApplicationSort>("NEWEST");
   const [offset, setOffset] = useState(0);
+  const [selection, setSelection] = useState<{ jobId: string; ids: string[] }>({
+    jobId,
+    ids: [],
+  });
+  const selectedIds = selection.jobId === jobId ? selection.ids : [];
+  const selectedIdSet = new Set(selectedIds);
+  const selectionLimitReached = selectedIds.length >= MAX_COMPARISON_CANDIDATES;
+  const comparisonReady = canCompareCandidates(selectedIds);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -97,6 +113,20 @@ export function JobApplicants({ jobId }: { jobId: string }) {
     setStatus("ALL");
     setSort("NEWEST");
     setOffset(0);
+  };
+
+  const toggleComparisonSelection = (applicationId: string, eligible: boolean) => {
+    const change = updateComparisonSelection(selectedIds, applicationId, eligible);
+    setSelection({ jobId, ids: change.ids });
+  };
+
+  const handleClearComparisonSelection = () => {
+    setSelection({ jobId, ids: clearComparisonSelection(selectedIds) });
+  };
+
+  const compareCandidates = () => {
+    if (!comparisonReady) return;
+    router.push(buildComparisonUrl(jobId, selectedIds));
   };
 
   if (loading && !data) return <ApplicantsLoading />;
@@ -177,6 +207,38 @@ export function JobApplicants({ jobId }: { jobId: string }) {
         </div>
       </div>
 
+      {selectedIds.length ? (
+        <div
+          className="flex flex-col gap-3 rounded-xl border border-[#cfe1dc] bg-[#f2f8f6] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm ring-1 ring-[#d8e8e4]">
+              <Scale className="size-4" aria-hidden="true" />
+            </span>
+            <div className="min-w-0" aria-live="polite">
+              <p className="text-sm font-semibold">
+                {selectedIds.length} {selectedIds.length === 1 ? "candidate" : "candidates"} selected
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {selectionLimitReached
+                  ? "Maximum of 5 candidates selected."
+                  : comparisonReady
+                    ? "Ready to compare existing AI evaluations."
+                    : "Select at least one more evaluated candidate to compare."}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+            <Button variant="ghost" size="sm" onClick={handleClearComparisonSelection}>
+              Clear selection
+            </Button>
+            <Button size="sm" disabled={!comparisonReady} onClick={compareCandidates}>
+              <Scale /> Compare candidates
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {!applications.length ? (
         <EmptyState
           icon={UserRoundSearch}
@@ -198,6 +260,9 @@ export function JobApplicants({ jobId }: { jobId: string }) {
             <table className="w-full min-w-[900px] text-left" aria-busy={loading}>
               <thead className="border-b bg-muted/55 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 <tr>
+                  <th className="w-12 px-3 py-3.5 text-center">
+                    <span className="sr-only">Compare</span>
+                  </th>
                   <th className="px-5 py-3.5">Candidate</th>
                   <th className="px-4 py-3.5">Status</th>
                   <th className="px-4 py-3.5">Fit score</th>
@@ -209,6 +274,19 @@ export function JobApplicants({ jobId }: { jobId: string }) {
               <tbody className="divide-y">
                 {applications.map((application) => {
                   const detailUrl = `/jobs/${jobId}/applications/${application.id}`;
+                  const selected = selectedIdSet.has(application.id);
+                  const comparisonEligible =
+                    application.evaluationProcessingState === "COMPLETED" &&
+                    application.evaluation !== null;
+                  const selectionDisabled =
+                    !comparisonEligible || (selectionLimitReached && !selected);
+                  const selectionHint = !comparisonEligible
+                    ? "AI evaluation required"
+                    : selectionDisabled
+                      ? "Maximum 5 candidates selected"
+                      : selected
+                        ? `Remove ${application.candidate.name} from comparison`
+                        : `Select ${application.candidate.name} for comparison`;
 
                   return (
                     <tr
@@ -219,8 +297,32 @@ export function JobApplicants({ jobId }: { jobId: string }) {
                       onKeyDown={(event) => {
                         if (event.key === "Enter") router.push(detailUrl);
                       }}
-                      className="cursor-pointer transition-colors hover:bg-muted/35 focus:bg-muted/35 focus:outline-none"
+                      className={cn(
+                        "cursor-pointer transition-colors hover:bg-muted/35 focus:bg-muted/35 focus:outline-none",
+                        selected && "bg-[#f4f9f7] hover:bg-[#edf6f3]",
+                      )}
                     >
+                      <td className="px-3 py-4 text-center">
+                        <span
+                          className="inline-flex size-8 items-center justify-center rounded-md"
+                          title={selectionHint}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={selectionDisabled}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={() =>
+                              toggleComparisonSelection(
+                                application.id,
+                                comparisonEligible,
+                              )
+                            }
+                            aria-label={selectionHint}
+                            className="size-4 rounded border-input accent-[var(--primary)] outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-45"
+                          />
+                        </span>
+                      </td>
                       <td className="px-5 py-4">
                         <Link
                           href={detailUrl}
