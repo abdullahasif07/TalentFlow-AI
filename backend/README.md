@@ -159,6 +159,67 @@ query RecommendedCandidates {
 Jobs expose `criteriaProcessingState`, resumes expose `processingState`, and applications expose
 `evaluationProcessingState`. Each uses `NOT_STARTED`, `PROCESSING`, `COMPLETED`, or `FAILED`.
 
+## Candidate comparison GraphQL operation
+
+`compareCandidates` generates an on-demand, job-specific tradeoff summary from already persisted
+resume and evaluation data. Select between 2 and 5 unique Applications. Every Application must
+belong to the supplied Job and must have a completed AI evaluation; the operation does not create
+evaluations or change scores, statuses, recommendations, resumes, or pipeline history.
+
+```graphql
+mutation CompareCandidates($input: CompareCandidatesInput!) {
+  compareCandidates(input: $input) {
+    success
+    job { id title }
+    candidates {
+      applicationId
+      candidateId
+      name
+      overallScore
+      confidence
+      recommendation
+      strengths { summary evidence }
+      gaps { summary evidence }
+    }
+    categories {
+      name
+      weight
+      candidates {
+        applicationId
+        available
+        score
+        summary
+      }
+    }
+    summary {
+      overview
+      relativeStrengths
+      tradeoffs
+      differentiatingExperience
+      notableGaps
+      comparableAreas
+    }
+    errors { code message field }
+  }
+}
+```
+
+Example variables:
+
+```json
+{
+  "input": {
+    "jobId": "1",
+    "applicationIds": ["10", "11", "12"]
+  }
+}
+```
+
+Overall and category scores come from the stored `AIEvaluation`; the LLM only supplies the
+structured comparative narrative. If a completed legacy evaluation lacks one rubric category,
+that candidate/category cell returns `available: false` and `score: null` instead of inventing a
+score. Expected comparison errors are returned through the typed `errors` payload.
+
 ## Backend capabilities
 
 - Public application submission with candidate reuse and duplicate-job protection
@@ -167,6 +228,7 @@ Jobs expose `criteriaProcessingState`, resumes expose `processingState`, and app
 - Audited individual and bulk pipeline status updates
 - Recruiter notes kept separate from AI evaluation data
 - PDF text extraction, structured resume parsing, job rubrics, and evidence-based candidate scoring
+- Read-only, job-specific comparison of 2–5 evaluated Applications
 - Redis-backed Celery tasks for independent resume, criteria, and evaluation processing
 - No automatic ranking, authentication, or frontend workflow yet
 
