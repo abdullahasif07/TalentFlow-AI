@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
@@ -38,9 +38,15 @@ import { formatDate } from "@/lib/graphql/jobs";
 import { cn } from "@/lib/utils";
 import {
   MAX_COMPARISON_CANDIDATES,
+  activateComparisonJob,
   buildComparisonUrl,
   canCompareCandidates,
   clearComparisonSelection,
+  getServerComparisonSelection,
+  getStoredComparisonSelection,
+  removeIneligibleVisibleSelections,
+  storeComparisonSelection,
+  subscribeComparisonSelection,
   updateComparisonSelection,
 } from "@/lib/comparison-selection";
 
@@ -71,14 +77,23 @@ export function JobApplicants({ jobId }: { jobId: string }) {
   const [status, setStatus] = useState("ALL");
   const [sort, setSort] = useState<ApplicationSort>("NEWEST");
   const [offset, setOffset] = useState(0);
-  const [selection, setSelection] = useState<{ jobId: string; ids: string[] }>({
-    jobId,
-    ids: [],
-  });
-  const selectedIds = selection.jobId === jobId ? selection.ids : [];
+  const subscribeToSelection = useCallback(
+    (listener: () => void) => subscribeComparisonSelection(listener),
+    [],
+  );
+  const readSelection = useCallback(() => getStoredComparisonSelection(jobId), [jobId]);
+  const selectedIds = useSyncExternalStore(
+    subscribeToSelection,
+    readSelection,
+    getServerComparisonSelection,
+  );
   const selectedIdSet = new Set(selectedIds);
   const selectionLimitReached = selectedIds.length >= MAX_COMPARISON_CANDIDATES;
   const comparisonReady = canCompareCandidates(selectedIds);
+
+  useEffect(() => {
+    activateComparisonJob(jobId);
+  }, [jobId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -107,6 +122,21 @@ export function JobApplicants({ jobId }: { jobId: string }) {
     },
   );
 
+  useEffect(() => {
+    if (!data?.applications.success) return;
+    const validSelection = removeIneligibleVisibleSelections(
+      selectedIds,
+      data.applications.items.map((application) => ({
+        applicationId: application.id,
+        eligible:
+          application.evaluationProcessingState === "COMPLETED" &&
+          application.evaluation !== null,
+      })),
+    );
+    if (validSelection.length === selectedIds.length) return;
+    storeComparisonSelection(jobId, validSelection);
+  }, [data, jobId, selectedIds]);
+
   const clearControls = () => {
     setSearch("");
     setDebouncedSearch("");
@@ -117,11 +147,11 @@ export function JobApplicants({ jobId }: { jobId: string }) {
 
   const toggleComparisonSelection = (applicationId: string, eligible: boolean) => {
     const change = updateComparisonSelection(selectedIds, applicationId, eligible);
-    setSelection({ jobId, ids: change.ids });
+    storeComparisonSelection(jobId, change.ids);
   };
 
   const handleClearComparisonSelection = () => {
-    setSelection({ jobId, ids: clearComparisonSelection(selectedIds) });
+    storeComparisonSelection(jobId, clearComparisonSelection(selectedIds));
   };
 
   const compareCandidates = () => {

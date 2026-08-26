@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 
 import { CandidateComparison } from "@/components/jobs/candidate-comparison";
 import { PageContainer } from "@/components/shared/page-container";
-import { parseComparisonSelection } from "@/lib/comparison-selection";
+import {
+  comparisonJobIdError,
+  parseComparisonSelection,
+} from "@/lib/comparison-selection";
 
 export const metadata: Metadata = { title: "Candidate comparison" };
 
@@ -15,13 +18,14 @@ export default async function CandidateComparisonPage({
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const selection = parseComparisonSelection(query.applications);
+  const inputError = comparisonJobIdError(id) ?? selection.error;
 
   return (
     <PageContainer>
       <CandidateComparison
         jobId={id}
         applicationIds={selection.ids}
-        inputError={selection.error}
+        inputError={inputError}
       />
     </PageContainer>
   );
