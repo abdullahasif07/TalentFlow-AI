@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { FitScore } from "@/components/shared/fit-score-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -35,10 +36,14 @@ import {
 } from "@/lib/graphql/comparison";
 import { graphQLErrorMessage } from "@/lib/graphql/errors";
 import {
-  formatComparisonScore,
+  comparisonScoreAvailable,
   gapEvidenceLabel,
 } from "@/lib/comparison-presentation";
-import { buildApplicantsUrl } from "@/lib/comparison-selection";
+import {
+  buildApplicantsUrl,
+  buildCandidateComparisonInput,
+  storeComparisonSelection,
+} from "@/lib/comparison-selection";
 import { cn } from "@/lib/utils";
 
 const APPLICATION_STATUS_FRAGMENT = gql`
@@ -118,10 +123,12 @@ function ComparisonLoading({ count }: { count: number }) {
 function ComparisonError({
   message,
   backHref,
+  onSelectDifferent,
   onRetry,
 }: {
   message: string;
   backHref: string;
+  onSelectDifferent: () => void;
   onRetry?: () => void;
 }) {
   return (
@@ -135,8 +142,12 @@ function ComparisonError({
           {message}
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-2">
-          <Link href={backHref} className={buttonVariants({ variant: "outline" })}>
-            <ArrowLeft /> Return to applicants
+          <Link
+            href={backHref}
+            onClick={onSelectDifferent}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <ArrowLeft /> Select different candidates
           </Link>
           {onRetry ? (
             <Button onClick={onRetry}>
@@ -150,9 +161,11 @@ function ComparisonError({
 }
 
 function CandidateSummaryCards({
+  jobId,
   candidates,
   statuses,
 }: {
+  jobId: string;
   candidates: ComparedCandidate[];
   statuses: Record<string, ApplicationStatus | undefined>;
 }) {
@@ -171,28 +184,34 @@ function CandidateSummaryCards({
         >
           {candidates.map((candidate) => {
             const status = statuses[candidate.applicationId];
+            const detailHref = `/jobs/${encodeURIComponent(jobId)}/applications/${encodeURIComponent(candidate.applicationId)}`;
 
             return (
               <Card key={candidate.applicationId} className="min-w-0">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="break-words text-base font-semibold leading-6">
+                      <Link
+                        href={detailHref}
+                        className="break-words text-base font-semibold leading-6 transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                      >
                         {candidate.name}
-                      </p>
+                      </Link>
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         Application {candidate.applicationId}
                       </p>
                     </div>
                     {status ? <StatusBadge status={status} /> : null}
                   </div>
-                  <div className="mt-5 flex items-end gap-1.5">
-                    <span className="text-3xl font-semibold tracking-tight tabular-nums">
-                      {formatComparisonScore(candidate.overallScore)}
-                    </span>
-                    <span className="pb-1 text-sm font-medium text-muted-foreground">
-                      / 100
-                    </span>
+                  <div className="mt-5">
+                    <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                      Overall fit
+                    </p>
+                    <FitScore
+                      score={candidate.overallScore}
+                      processingState="COMPLETED"
+                      className="min-w-16 px-3 py-1.5 text-sm"
+                    />
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Badge
@@ -216,7 +235,13 @@ function CandidateSummaryCards({
   );
 }
 
-function ComparisonTable({ result }: { result: CandidateComparisonPayload }) {
+function ComparisonTable({
+  jobId,
+  result,
+}: {
+  jobId: string;
+  result: CandidateComparisonPayload;
+}) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b">
@@ -236,7 +261,12 @@ function ComparisonTable({ result }: { result: CandidateComparisonPayload }) {
               <th className="sticky left-0 z-10 w-52 bg-muted px-5 py-3.5">Category</th>
               {result.candidates.map((candidate) => (
                 <th key={candidate.applicationId} className="min-w-48 px-4 py-3.5">
-                  <span className="block max-w-48 break-words">{candidate.name}</span>
+                  <Link
+                    href={`/jobs/${encodeURIComponent(jobId)}/applications/${encodeURIComponent(candidate.applicationId)}`}
+                    className="block max-w-48 break-words transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                  >
+                    {candidate.name}
+                  </Link>
                 </th>
               ))}
             </tr>
@@ -247,12 +277,11 @@ function ComparisonTable({ result }: { result: CandidateComparisonPayload }) {
                 Overall fit
               </th>
               {result.candidates.map((candidate) => (
-                <td
-                  key={candidate.applicationId}
-                  className="px-4 py-4 text-lg font-semibold tabular-nums"
-                >
-                  {formatComparisonScore(candidate.overallScore)}
-                  <span className="ml-1 text-xs font-medium text-muted-foreground">/ 100</span>
+                <td key={candidate.applicationId} className="px-4 py-4">
+                  <FitScore
+                    score={candidate.overallScore}
+                    processingState="COMPLETED"
+                  />
                 </td>
               ))}
             </tr>
@@ -268,25 +297,23 @@ function ComparisonTable({ result }: { result: CandidateComparisonPayload }) {
                   const categoryResult = category.candidates.find(
                     (item) => item.applicationId === candidate.applicationId,
                   );
-                  const available = Boolean(
-                    categoryResult?.available && categoryResult.score !== null,
+                  const available = comparisonScoreAvailable(
+                    categoryResult?.available ?? false,
+                    categoryResult?.score ?? null,
                   );
 
                   return (
                     <td key={candidate.applicationId} className="px-4 py-4">
-                      <p
-                        className={cn(
-                          "font-semibold tabular-nums",
-                          available ? "text-foreground" : "text-sm text-muted-foreground",
-                        )}
-                      >
-                        {formatComparisonScore(categoryResult?.score ?? null)}
-                        {available ? (
-                          <span className="ml-1 text-xs font-medium text-muted-foreground">
-                            / 100
-                          </span>
-                        ) : null}
-                      </p>
+                      {available ? (
+                        <FitScore
+                          score={categoryResult?.score ?? null}
+                          processingState="COMPLETED"
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Not available
+                        </p>
+                      )}
                       {categoryResult?.summary ? (
                         <details className="group mt-2 max-w-64 text-xs">
                           <summary className="cursor-pointer font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30">
@@ -380,7 +407,13 @@ function FindingGroup({
   );
 }
 
-function CandidateEvidence({ candidates }: { candidates: ComparedCandidate[] }) {
+function CandidateEvidence({
+  jobId,
+  candidates,
+}: {
+  jobId: string;
+  candidates: ComparedCandidate[];
+}) {
   return (
     <section aria-labelledby="candidate-evidence-heading">
       <div>
@@ -402,7 +435,14 @@ function CandidateEvidence({ candidates }: { candidates: ComparedCandidate[] }) 
           {candidates.map((candidate) => (
             <Card key={candidate.applicationId} className="min-w-0">
               <CardHeader className="border-b">
-                <CardTitle className="break-words leading-6">{candidate.name}</CardTitle>
+                <CardTitle className="break-words leading-6">
+                  <Link
+                    href={`/jobs/${encodeURIComponent(jobId)}/applications/${encodeURIComponent(candidate.applicationId)}`}
+                    className="transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                  >
+                    {candidate.name}
+                  </Link>
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6 pt-5">
                 <FindingGroup title="Strengths" findings={candidate.strengths} tone="strength" />
@@ -513,7 +553,9 @@ export function CandidateComparison({
     });
     try {
       const response = await compareCandidates({
-        variables: { input: { jobId, applicationIds } },
+        variables: {
+          input: buildCandidateComparisonInput(jobId, applicationIds),
+        },
       });
       if (requestSequenceRef.current !== sequence) return;
       setRequestState({
@@ -555,6 +597,9 @@ export function CandidateComparison({
   }, [applicationIds, client]);
 
   const backHref = buildApplicantsUrl(jobId);
+  const selectDifferentCandidates = () => {
+    storeComparisonSelection(jobId, []);
+  };
   const backLink = (
     <Link
       href={backHref}
@@ -571,7 +616,11 @@ export function CandidateComparison({
     return (
       <div className="space-y-5">
         {backLink}
-        <ComparisonError message={inputError} backHref={backHref} />
+        <ComparisonError
+          message={inputError}
+          backHref={backHref}
+          onSelectDifferent={selectDifferentCandidates}
+        />
       </div>
     );
   }
@@ -611,6 +660,7 @@ export function CandidateComparison({
         <ComparisonError
           message={failureMessage ?? "The comparison could not be generated."}
           backHref={backHref}
+          onSelectDifferent={selectDifferentCandidates}
           onRetry={() => {
             completedRequestRef.current = null;
             void runComparison();
@@ -641,10 +691,14 @@ export function CandidateComparison({
         </Badge>
       </header>
 
-      <CandidateSummaryCards candidates={result.candidates} statuses={statuses} />
-      <ComparisonTable result={result} />
+      <CandidateSummaryCards
+        jobId={jobId}
+        candidates={result.candidates}
+        statuses={statuses}
+      />
+      <ComparisonTable jobId={jobId} result={result} />
       <TradeoffSummary summary={result.summary} />
-      <CandidateEvidence candidates={result.candidates} />
+      <CandidateEvidence jobId={jobId} candidates={result.candidates} />
     </div>
   );
 }
