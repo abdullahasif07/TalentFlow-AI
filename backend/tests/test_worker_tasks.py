@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pydantic import BaseModel
 from pypdf import PdfWriter
@@ -20,6 +20,7 @@ from app.enums import AIProcessingState, ApplicationStatus, JobStatus
 from app.services.ai.candidate_evaluation import CandidateEvaluationService
 from app.services.ai.job_criteria import JobCriteriaService
 from app.services.ai.resume_parser import ResumeParsingService
+from app.services.ai_processing import ProcessingRequest
 from app.services.errors import (
     JobCriteriaProviderError,
     MissingStructuredResumeDataError,
@@ -178,7 +179,21 @@ class WorkerWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
-        with patch.object(worker_tasks, "ResumeParsingService", return_value=parser):
+        with (
+            patch.object(worker_tasks, "ResumeParsingService", return_value=parser),
+            patch.object(
+                worker_tasks.AIProcessingService,
+                "generate_candidate_evaluation",
+                new_callable=AsyncMock,
+                return_value=ProcessingRequest(
+                    accepted=True,
+                    resource_id=self.application.id,
+                    state=AIProcessingState.PROCESSING,
+                    message="Candidate evaluation was queued.",
+                    task_id="evaluation-task-1",
+                ),
+            ) as enqueue_evaluation,
+        ):
             result = await worker_tasks.process_resume_workflow(self.application.id)
 
         await self.resume.refresh_from_db()
@@ -189,6 +204,47 @@ class WorkerWorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.resume.processing_state,
             AIProcessingState.COMPLETED,
         )
+        self.assertTrue(result["evaluation_queued"])
+        enqueue_evaluation.assert_awaited_once_with(self.application.id)
+
+    async def test_repeated_resume_processing_does_not_requeue_completed_evaluation(
+        self,
+    ) -> None:
+        self.application.evaluation_processing_state = AIProcessingState.COMPLETED
+        await self.application.save(
+            update_fields=["evaluation_processing_state", "updated_at"]
+        )
+        parser = ResumeParsingService(
+            client=MockStructuredOutputClient(
+                {
+                    "professional_summary": None,
+                    "skills": ["Python"],
+                    "technologies": [],
+                    "total_experience_years": None,
+                    "employment_history": [],
+                    "education": [],
+                    "projects": [],
+                    "certifications": [],
+                    "normalization_notes": [],
+                }
+            )
+        )
+        with (
+            patch.object(worker_tasks, "ResumeParsingService", return_value=parser),
+            patch.object(
+                worker_tasks.AIProcessingService,
+                "generate_candidate_evaluation",
+                new_callable=AsyncMock,
+            ) as enqueue_evaluation,
+        ):
+            result = await worker_tasks.process_resume_workflow(self.application.id)
+
+        self.assertFalse(result["evaluation_queued"])
+        self.assertEqual(
+            result["evaluation_message"],
+            "Candidate evaluation is already complete.",
+        )
+        enqueue_evaluation.assert_not_awaited()
 
     async def test_job_criteria_workflow_generates_and_persists(self) -> None:
         self.job.evaluation_criteria = {}

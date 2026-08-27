@@ -14,7 +14,9 @@ from app.services.ai.client import LLMConfigurationError
 from app.services.ai.candidate_evaluation import CandidateEvaluationService
 from app.services.ai.job_criteria import JobCriteriaService
 from app.services.ai.resume_parser import ResumeParsingService
+from app.services.ai_processing import AIProcessingService
 from app.services.errors import (
+    AIProcessingRequestError,
     CandidateEvaluationError,
     CandidateEvaluationProviderError,
     EvaluationApplicationNotFoundError,
@@ -57,7 +59,9 @@ PermanentTaskError = (
 
 
 async def process_resume_workflow(application_id: int) -> dict[str, Any]:
-    application = await Application.get_or_none(id=application_id)
+    application = await Application.get_or_none(id=application_id).select_related(
+        "job"
+    )
     if application is None:
         raise EvaluationApplicationNotFoundError("Application record not found.")
 
@@ -67,11 +71,54 @@ async def process_resume_workflow(application_id: int) -> dict[str, Any]:
 
     raw_text = await ResumeExtractionService().extract_and_save(resume.id)
     parsed_resume = await ResumeParsingService().parse_and_save(resume.id)
+
+    evaluation_queued = False
+    evaluation_message = "Candidate evaluation is waiting for job criteria."
+    if (
+        isinstance(application.job.evaluation_criteria, dict)
+        and bool(application.job.evaluation_criteria)
+        and application.evaluation_processing_state
+        not in {AIProcessingState.PROCESSING, AIProcessingState.COMPLETED}
+    ):
+        try:
+            evaluation_request = (
+                await AIProcessingService.generate_candidate_evaluation(
+                    application.id
+                )
+            )
+            evaluation_queued = evaluation_request.accepted
+            evaluation_message = evaluation_request.message
+        except AIProcessingRequestError as exc:
+            evaluation_message = (
+                "Resume processing completed, but candidate evaluation could not be queued."
+            )
+            logger.error(
+                "Unable to queue candidate evaluation after resume processing for "
+                "application_id=%s: %s",
+                application.id,
+                exc,
+            )
+        except Exception:
+            evaluation_message = (
+                "Resume processing completed, but candidate evaluation could not be queued."
+            )
+            logger.exception(
+                "Unexpected evaluation enqueue failure after resume processing for "
+                "application_id=%s",
+                application.id,
+            )
+    elif application.evaluation_processing_state == AIProcessingState.PROCESSING:
+        evaluation_message = "Candidate evaluation is already processing."
+    elif application.evaluation_processing_state == AIProcessingState.COMPLETED:
+        evaluation_message = "Candidate evaluation is already complete."
+
     return {
         "application_id": application.id,
         "resume_id": resume.id,
         "raw_text_length": len(raw_text),
         "parsed_field_count": len(parsed_resume.model_dump()),
+        "evaluation_queued": evaluation_queued,
+        "evaluation_message": evaluation_message,
         "status": "processed",
     }
 
