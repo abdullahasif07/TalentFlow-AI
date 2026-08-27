@@ -4,14 +4,16 @@ import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from starlette.datastructures import Headers, UploadFile
 from tortoise import Tortoise
 
 from app.config import settings
 from app.db.models import Application, Candidate, Company, Job
-from app.enums import ApplicationStatus, JobStatus
+from app.enums import AIProcessingState, ApplicationStatus, JobStatus
 from app.graphql.schema import schema
+from app.services.ai_processing import ProcessingRequest
 
 
 class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
@@ -70,6 +72,22 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             )
         )["job"]
         self.assertTrue(job["success"])
+
+        public_job = self.assert_success(
+            await schema.execute(
+                """
+                query($input: PublicJobQueryInput!) {
+                  publicJob(input: $input) {
+                    success
+                    job { id title company { name website } }
+                    errors { code message field }
+                  }
+                }
+                """,
+                variable_values={"input": {"id": str(self.job.id)}},
+            )
+        )["publicJob"]
+        self.assertTrue(public_job["success"])
 
         applications = self.assert_success(
             await schema.execute(
@@ -164,28 +182,46 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             filename="resume.pdf",
             headers=Headers({"content-type": "application/pdf"}),
         )
-        submitted = self.assert_success(
-            await schema.execute(
-                """
-                mutation($input: SubmitApplicationInput!) {
-                  submitApplication(input: $input) {
-                    success application { id status resumeUrl } errors { code message field }
-                  }
-                }
-                """,
-                variable_values={
-                    "input": {
-                        "jobId": str(self.job.id),
-                        "fullName": "New Applicant",
-                        "email": "new.applicant@example.com",
-                        "coverLetter": "I am interested in this role.",
-                        "resume": upload,
+        with patch(
+            "app.graphql.mutations.application.AIProcessingService."
+            "process_application_resume",
+            new_callable=AsyncMock,
+            return_value=ProcessingRequest(
+                accepted=True,
+                resource_id=1,
+                state=AIProcessingState.PROCESSING,
+                message="Resume processing was queued.",
+                task_id="task-1",
+            ),
+        ):
+            submitted = self.assert_success(
+                await schema.execute(
+                    """
+                    mutation($input: SubmitApplicationInput!) {
+                      submitApplication(input: $input) {
+                        success
+                        application {
+                          id candidateName jobTitle status submittedAt
+                          processingState processingMessage
+                        }
+                        errors { code message field }
+                      }
                     }
-                },
-            )
-        )["submitApplication"]
+                    """,
+                    variable_values={
+                        "input": {
+                            "jobId": str(self.job.id),
+                            "fullName": "New Applicant",
+                            "email": "new.applicant@example.com",
+                            "coverLetter": "I am interested in this role.",
+                            "resume": upload,
+                        }
+                    },
+                )
+            )["submitApplication"]
         self.assertTrue(submitted["success"])
         self.assertEqual(submitted["application"]["status"], ApplicationStatus.APPLIED.value)
+        self.assertEqual(submitted["application"]["processingState"], "PROCESSING")
 
         duplicate_upload = UploadFile(
             BytesIO(b"%PDF-1.7\nDuplicate GraphQL contract resume"),
@@ -221,6 +257,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         expected = (
             "jobs(input: JobsQueryInput = null): JobsResult!",
             "job(input: JobQueryInput!): JobResult!",
+            "publicJob(input: PublicJobQueryInput!): PublicJobResult!",
             "applications(input: ApplicationsQueryInput!): ApplicationsResult!",
             "application(input: ApplicationQueryInput!): ApplicationResult!",
             "recommendedCandidates(input: RecommendedCandidatesInput!): "

@@ -383,6 +383,31 @@ updates may partially succeed, so clients should inspect both `applications` and
 
 ## Submit an application with a resume
 
+Load applicant-safe details for one published job with:
+
+```graphql
+query PublicJob($input: PublicJobQueryInput!) {
+  publicJob(input: $input) {
+    success
+    job {
+      id
+      title
+      description
+      requiredSkills
+      preferredSkills
+      experienceRequirement
+      status
+      company { name website }
+    }
+    errors { code message field }
+  }
+}
+```
+
+Use variables such as `{ "input": { "id": "1" } }`. Only `OPEN` jobs are returned. Missing,
+`DRAFT`, and `CLOSED` jobs all produce the same public-safe `NOT_FOUND` response and do not expose
+recruiter statistics, evaluation criteria, notes, or applicant data.
+
 Application submission uses the GraphQL multipart request specification because the input
 contains a file. Only non-empty PDF files up to the configured size limit are accepted.
 
@@ -390,7 +415,7 @@ With the API running and an open job whose ID is `1`, test the mutation from ano
 
 ```bash
 curl http://localhost:8000/graphql \
-  -F 'operations={"query":"mutation Submit($input: SubmitApplicationInput!) { submitApplication(input: $input) { success application { id status resumeUrl candidate { id name email } job { id title } } errors { code message field } } }","variables":{"input":{"jobId":"1","fullName":"Jordan Taylor","email":"jordan@example.com","phone":"+1 415 555 0142","linkedinUrl":"https://linkedin.com/in/jordan-taylor","githubUrl":"https://github.com/jordantaylor","portfolioUrl":"https://jordantaylor.example.com","coverLetter":"I am excited to apply for this role.","resume":null}}}' \
+  -F 'operations={"query":"mutation Submit($input: SubmitApplicationInput!) { submitApplication(input: $input) { success application { id candidateName jobTitle status submittedAt processingState processingMessage } errors { code message field } } }","variables":{"input":{"jobId":"1","fullName":"Jordan Taylor","email":"jordan@example.com","phone":"+1 415 555 0142","linkedinUrl":"https://linkedin.com/in/jordan-taylor","githubUrl":"https://github.com/jordantaylor","portfolioUrl":"https://jordantaylor.example.com","coverLetter":"I am excited to apply for this role.","resume":null}}}' \
   -F 'map={"0":["variables.input.resume"]}' \
   -F '0=@/absolute/path/to/resume.pdf;type=application/pdf'
 ```
@@ -399,6 +424,17 @@ The mutation normalizes the email, reuses an existing candidate, prevents a seco
 to the same job, creates an initial `APPLIED` history entry, and stores the file at
 `uploads/resumes/{candidate_id}/{generated_filename}.pdf`. A later application to a different
 job is allowed and updates that candidate's current `Resume` record.
+
+After the database transaction commits, the mutation queues the existing Celery resume workflow
+and returns immediately with a processing state/message. The worker extracts and parses the PDF,
+then queues the existing candidate-evaluation task when the Job already has evaluation criteria.
+Repeated resume-task execution does not requeue an evaluation that is already processing or
+complete. Keep Redis and the Celery worker running to execute this background work.
+
+`publicJob` and `submitApplication` intentionally require no recruiter identity. The project does
+not yet have authentication middleware, so recruiter-only GraphQL operations also remain
+unauthenticated until the planned authentication work is added; the public types themselves are
+kept narrow so these operations do not leak internal fields.
 
 Run the submission tests with:
 
