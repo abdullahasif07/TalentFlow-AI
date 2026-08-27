@@ -7,8 +7,7 @@ import {
   InMemoryCache,
 } from "@apollo/client-integration-nextjs";
 
-const graphqlUrl =
-  process.env.NEXT_PUBLIC_GRAPHQL_URL ?? "http://localhost:8000/graphql";
+import { graphqlUrl } from "@/lib/graphql/config";
 
 function makeClient() {
   return new ApolloClient({
