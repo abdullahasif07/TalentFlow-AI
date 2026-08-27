@@ -561,9 +561,38 @@ class RecommendedCandidatesResult:
 
 
 @strawberry.type
+class PublicApplicationReceipt:
+    id: strawberry.ID
+    candidate_name: str
+    job_title: str
+    status: ApplicationStatus
+    submitted_at: datetime
+    processing_state: AIProcessingState
+    processing_message: str
+
+    @classmethod
+    def from_model(
+        cls,
+        application: Application,
+        *,
+        processing_state: AIProcessingState,
+        processing_message: str,
+    ) -> "PublicApplicationReceipt":
+        return cls(
+            id=strawberry.ID(str(application.id)),
+            candidate_name=application.candidate.name,
+            job_title=application.job.title,
+            status=application.status,
+            submitted_at=application.applied_at,
+            processing_state=processing_state,
+            processing_message=processing_message,
+        )
+
+
+@strawberry.type
 class SubmitApplicationPayload:
     success: bool
-    application: ApplicationType | None
+    application: PublicApplicationReceipt | None
     errors: list[OperationError]
 
 

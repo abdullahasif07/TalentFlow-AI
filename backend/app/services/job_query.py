@@ -3,7 +3,7 @@ from tortoise.functions import Count
 from tortoise.queryset import QuerySet
 
 from app.db.models import Job
-from app.enums import AIProcessingState, ApplicationStatus
+from app.enums import AIProcessingState, ApplicationStatus, JobStatus
 
 
 class RecruiterJobQueryService:
@@ -41,3 +41,13 @@ class RecruiterJobQueryService:
                 ),
             ),
         )
+
+
+class PublicJobQueryService:
+    """Load only jobs that are currently available to public applicants."""
+
+    @staticmethod
+    async def get_open_job(job_id: int) -> Job | None:
+        return await Job.filter(id=job_id, status=JobStatus.OPEN).select_related(
+            "company"
+        ).first()

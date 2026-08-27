@@ -10,7 +10,7 @@ from app.services.application_pipeline import ApplicationPipelineService
 from app.services.application_query import RecruiterApplicationQueryService
 from app.services.candidate import CandidateService, CandidateSubmissionData
 from app.services.email_delivery import EmailDeliveryService, SimulatedEmailDeliveryService
-from app.services.job_query import RecruiterJobQueryService
+from app.services.job_query import PublicJobQueryService, RecruiterJobQueryService
 from app.services.outreach import OutreachWorkflowService
 from app.services.resume_extraction import ResumeExtractionService
 from app.services.resume_storage import ResumeStorageService
@@ -28,6 +28,7 @@ __all__ = [
     "JobCriteriaService",
     "OutreachGenerationService",
     "OutreachWorkflowService",
+    "PublicJobQueryService",
     "RecruiterApplicationQueryService",
     "RecruiterJobQueryService",
     "ResumeExtractionService",

@@ -6,7 +6,7 @@ from typing import Any
 import strawberry
 from strawberry.scalars import JSON
 
-from app.db.models import Job
+from app.db.models import Company, Job
 from app.enums import AIProcessingState, JobStatus
 from app.graphql.types.common import OperationError
 
@@ -25,6 +25,41 @@ class JobSummary:
             title=job.title,
             status=job.status,
             criteria_processing_state=job.criteria_processing_state,
+        )
+
+
+@strawberry.type
+class PublicCompanyType:
+    name: str
+    website: str | None
+
+    @classmethod
+    def from_model(cls, company: Company) -> "PublicCompanyType":
+        return cls(name=company.name, website=company.website)
+
+
+@strawberry.type
+class PublicJobType:
+    id: strawberry.ID
+    title: str
+    description: str
+    required_skills: JSON
+    preferred_skills: JSON
+    experience_requirement: str | None
+    company: PublicCompanyType
+    status: JobStatus
+
+    @classmethod
+    def from_model(cls, job: Job) -> "PublicJobType":
+        return cls(
+            id=strawberry.ID(str(job.id)),
+            title=job.title,
+            description=job.description,
+            required_skills=job.required_skills,
+            preferred_skills=job.preferred_skills,
+            experience_requirement=job.experience_requirement,
+            company=PublicCompanyType.from_model(job.company),
+            status=job.status,
         )
 
 
@@ -87,6 +122,13 @@ class JobsResult:
 class JobResult:
     success: bool
     job: JobType | None
+    errors: list[OperationError]
+
+
+@strawberry.type
+class PublicJobResult:
+    success: bool
+    job: PublicJobType | None
     errors: list[OperationError]
 
 

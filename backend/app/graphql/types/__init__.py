@@ -12,6 +12,7 @@ from app.graphql.types.application import (
     CandidateSummary,
     EvaluationType,
     OutreachEmailType,
+    PublicApplicationReceipt,
     RecommendedCandidateType,
     RecommendedCandidatesResult,
     RecruiterSummary,
@@ -34,7 +35,16 @@ from app.graphql.types.comparison import (
     ComparisonCategoryType,
     ComparisonJobType,
 )
-from app.graphql.types.job import CreateJobPayload, JobResult, JobsResult, JobSummary, JobType
+from app.graphql.types.job import (
+    CreateJobPayload,
+    JobResult,
+    JobsResult,
+    JobSummary,
+    JobType,
+    PublicCompanyType,
+    PublicJobResult,
+    PublicJobType,
+)
 from app.graphql.types.outreach import OutreachMutationPayload
 
 __all__ = [
@@ -68,6 +78,10 @@ __all__ = [
     "OperationErrorCode",
     "OutreachEmailType",
     "OutreachMutationPayload",
+    "PublicApplicationReceipt",
+    "PublicCompanyType",
+    "PublicJobResult",
+    "PublicJobType",
     "ResumeType",
     "RecruiterSummary",
     "RecommendedCandidateType",

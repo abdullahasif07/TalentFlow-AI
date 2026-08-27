@@ -4,6 +4,7 @@ import logging
 
 import strawberry
 
+from app.enums import AIProcessingState
 from app.graphql.inputs import (
     AddApplicationNoteInput,
     BulkUpdateApplicationStatusInput,
@@ -18,6 +19,7 @@ from app.graphql.types import (
     BulkUpdateApplicationStatusPayload,
     OperationError,
     OperationErrorCode,
+    PublicApplicationReceipt,
     SubmitApplicationPayload,
     UpdateApplicationStatusPayload,
     operation_error,
@@ -26,8 +28,10 @@ from app.services import (
     ApplicationNoteService,
     ApplicationPipelineService,
     ApplicationService,
+    AIProcessingService,
 )
 from app.services.errors import (
+    AIProcessingRequestError,
     ApplicationNotFoundError,
     ApplicationNoteError,
     ApplicationPipelineError,
@@ -144,9 +148,44 @@ class ApplicationMutation:
                     )
                 ],
             )
+
+        processing_state = AIProcessingState.NOT_STARTED
+        processing_message = "Application received. Resume processing will begin shortly."
+        try:
+            processing = await AIProcessingService.process_application_resume(
+                application.id
+            )
+            processing_state = processing.state
+            processing_message = processing.message
+        except AIProcessingRequestError as exc:
+            logger.warning(
+                "Application %s was created but resume processing was not queued: %s",
+                application.id,
+                exc,
+            )
+            processing_state = AIProcessingState.FAILED
+            processing_message = (
+                "Application received, but resume processing could not be started. "
+                "It can be retried safely."
+            )
+        except Exception:
+            logger.exception(
+                "Application %s was created but resume processing failed to queue",
+                application.id,
+            )
+            processing_state = AIProcessingState.FAILED
+            processing_message = (
+                "Application received, but resume processing could not be started. "
+                "It can be retried safely."
+            )
+
         return SubmitApplicationPayload(
             success=True,
-            application=ApplicationType.from_model(application),
+            application=PublicApplicationReceipt.from_model(
+                application,
+                processing_state=processing_state,
+                processing_message=processing_message,
+            ),
             errors=[],
         )
 

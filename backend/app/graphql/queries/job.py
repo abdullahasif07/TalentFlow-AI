@@ -5,15 +5,17 @@ import logging
 import strawberry
 
 from app.db.models import Job
-from app.graphql.inputs import JobQueryInput, JobsQueryInput
+from app.graphql.inputs import JobQueryInput, JobsQueryInput, PublicJobQueryInput
 from app.graphql.types import (
     JobResult,
     JobsResult,
     JobType,
     OperationErrorCode,
+    PublicJobResult,
+    PublicJobType,
     operation_error,
 )
-from app.services import RecruiterJobQueryService
+from app.services import PublicJobQueryService, RecruiterJobQueryService
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,57 @@ logger = logging.getLogger(__name__)
 
 @strawberry.type
 class JobQuery:
+    @strawberry.field
+    async def public_job(self, input: PublicJobQueryInput) -> PublicJobResult:
+        try:
+            job_id = int(input.id)
+            if job_id < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            return PublicJobResult(
+                success=False,
+                job=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.VALIDATION_ERROR,
+                        "Invalid job ID.",
+                        "id",
+                    )
+                ],
+            )
+
+        try:
+            record = await PublicJobQueryService.get_open_job(job_id)
+        except Exception:
+            logger.exception("Unable to query public job %s", job_id)
+            return PublicJobResult(
+                success=False,
+                job=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.INTERNAL_ERROR,
+                        "Unable to load this job.",
+                    )
+                ],
+            )
+        if record is None:
+            return PublicJobResult(
+                success=False,
+                job=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.NOT_FOUND,
+                        "This job is not available.",
+                        "id",
+                    )
+                ],
+            )
+        return PublicJobResult(
+            success=True,
+            job=PublicJobType.from_model(record),
+            errors=[],
+        )
+
     @strawberry.field
     async def jobs(self, input: JobsQueryInput | None = None) -> JobsResult:
         try:

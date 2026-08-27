@@ -18,6 +18,11 @@ class JobQueryInput:
 
 
 @strawberry.input
+class PublicJobQueryInput:
+    id: strawberry.ID
+
+
+@strawberry.input
 class CreateJobInput:
     company_id: strawberry.ID
     title: str

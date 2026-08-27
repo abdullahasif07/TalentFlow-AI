@@ -16,7 +16,12 @@ from app.graphql.inputs.ai import (
     ScreenJobApplicantsInput,
 )
 from app.graphql.inputs.common import OffsetPaginationInput
-from app.graphql.inputs.job import CreateJobInput, JobQueryInput, JobsQueryInput
+from app.graphql.inputs.job import (
+    CreateJobInput,
+    JobQueryInput,
+    JobsQueryInput,
+    PublicJobQueryInput,
+)
 from app.graphql.inputs.outreach import (
     ApproveOutreachInput,
     GenerateOutreachInput,
@@ -40,6 +45,7 @@ __all__ = [
     "JobsQueryInput",
     "OffsetPaginationInput",
     "ProcessApplicationResumeInput",
+    "PublicJobQueryInput",
     "RecommendedCandidatesInput",
     "ScreenJobApplicantsInput",
     "SendOutreachInput",
