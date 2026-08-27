@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { completedFitScore } from "@/lib/fit-score";
 
 type EvaluationState = "NOT_STARTED" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -17,9 +18,9 @@ export function FitScore({
   processingState?: EvaluationState;
   className?: string;
 }) {
-  const numericScore = score === null ? null : Number(score);
+  const numericScore = completedFitScore(score, processingState);
 
-  if (numericScore === null || !Number.isFinite(numericScore)) {
+  if (numericScore === null) {
     const state = processingState === "COMPLETED" ? "NOT_STARTED" : processingState;
     const stateColor =
       state === "PROCESSING"

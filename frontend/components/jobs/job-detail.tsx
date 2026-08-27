@@ -11,8 +11,9 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { ApplicationLinkActions } from "@/components/jobs/application-link-actions";
 import { JobApplicants } from "@/components/jobs/job-applicants";
 import { JobInformation } from "@/components/jobs/job-information";
 import { RecommendedCandidates } from "@/components/jobs/recommended-candidates";
@@ -34,6 +35,12 @@ export function JobDetail({ jobId }: { jobId: string }) {
     variables: { input: { id: jobId } },
     fetchPolicy: "cache-and-network",
   });
+
+  useEffect(() => {
+    const refreshOnFocus = () => void refetch();
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [refetch]);
 
   const backLink = (
     <Link
@@ -111,9 +118,12 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </span>
             </div>
           </div>
-          <Badge variant="outline" className="border-[#d7e8e3] bg-[#eef7f4] text-primary">
-            <Sparkles className="size-3.5" /> AI criteria: {job.criteriaProcessingState.replaceAll("_", " ").toLowerCase()}
-          </Badge>
+          <div className="flex flex-col items-start gap-3 xl:items-end">
+            {job.status === "OPEN" ? <ApplicationLinkActions jobId={job.id} /> : null}
+            <Badge variant="outline" className="border-[#d7e8e3] bg-[#eef7f4] text-primary">
+              <Sparkles className="size-3.5" /> AI criteria: {job.criteriaProcessingState.replaceAll("_", " ").toLowerCase()}
+            </Badge>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -180,7 +190,11 @@ export function JobDetail({ jobId }: { jobId: string }) {
 
         <div role="tabpanel">
           {activeTab === "APPLICANTS" ? (
-            <JobApplicants key={jobId} jobId={jobId} />
+            <JobApplicants
+              key={jobId}
+              jobId={jobId}
+              onRefreshJob={() => void refetch()}
+            />
           ) : null}
           {activeTab === "RECOMMENDED" ? <RecommendedCandidates jobId={jobId} /> : null}
           {activeTab === "DETAILS" ? <JobInformation job={job} /> : null}

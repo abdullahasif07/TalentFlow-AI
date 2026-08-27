@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
   Scale,
   Search,
   UserRoundSearch,
@@ -14,13 +15,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
+import { ApplicationProcessingBadge } from "@/components/shared/application-processing-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { FitScore } from "@/components/shared/fit-score-badge";
-import {
-  ProcessingStateBadge,
-  evaluationStateLabel,
-} from "@/components/shared/processing-state-badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -70,7 +68,13 @@ function ApplicantsLoading() {
   );
 }
 
-export function JobApplicants({ jobId }: { jobId: string }) {
+export function JobApplicants({
+  jobId,
+  onRefreshJob,
+}: {
+  jobId: string;
+  onRefreshJob?: () => void;
+}) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -121,6 +125,30 @@ export function JobApplicants({ jobId }: { jobId: string }) {
       fetchPolicy: "cache-and-network",
     },
   );
+
+  useEffect(() => {
+    let lastRefreshAt = 0;
+    const refreshVisibleApplicants = () => {
+      const now = Date.now();
+      if (now - lastRefreshAt < 500) return;
+      lastRefreshAt = now;
+      void refetch();
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshVisibleApplicants();
+    };
+    window.addEventListener("focus", refreshVisibleApplicants);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleApplicants);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refetch]);
+
+  function refreshApplicants() {
+    void refetch();
+    onRefreshJob?.();
+  }
 
   useEffect(() => {
     if (!data?.applications.success) return;
@@ -233,6 +261,15 @@ export function JobApplicants({ jobId }: { jobId: string }) {
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={refreshApplicants}
+            >
+              <RefreshCw className={cn(loading && "animate-spin")} />
+              Refresh
+            </Button>
           </div>
         </div>
       </div>
@@ -370,7 +407,7 @@ export function JobApplicants({ jobId }: { jobId: string }) {
                       </td>
                       <td className="px-4 py-4">
                         <FitScore
-                          score={application.fitScore}
+                          score={application.evaluation ? application.fitScore : null}
                           processingState={application.evaluationProcessingState}
                         />
                       </td>
@@ -378,9 +415,10 @@ export function JobApplicants({ jobId }: { jobId: string }) {
                         {formatDate(application.appliedAt)}
                       </td>
                       <td className="px-4 py-4">
-                        <ProcessingStateBadge
-                          state={application.evaluationProcessingState}
-                          label={evaluationStateLabel(application.evaluationProcessingState)}
+                        <ApplicationProcessingBadge
+                          resumeState={application.resume?.processingState ?? null}
+                          evaluationState={application.evaluationProcessingState}
+                          hasEvaluation={application.evaluation !== null}
                         />
                       </td>
                       <td className="px-5 py-4 text-right">

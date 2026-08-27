@@ -59,6 +59,9 @@ export const GET_JOB_APPLICATIONS = gql`
           name
           email
         }
+        resume {
+          processingState
+        }
         evaluation {
           strengths {
             summary
@@ -344,6 +347,9 @@ export interface ApplicantListItem {
     name: string;
     email: string;
   };
+  resume: {
+    processingState: ProcessingState;
+  } | null;
   evaluation: {
     strengths: Array<{
       summary: string;
