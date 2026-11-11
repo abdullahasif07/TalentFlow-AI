@@ -19,6 +19,8 @@ class Recruiter(TimestampedModel):
     name = fields.CharField(max_length=255)
     email = fields.CharField(max_length=320, unique=True)
     role = fields.CharField(max_length=100)
+    password_hash = fields.CharField(max_length=255, null=True)
+    is_demo = fields.BooleanField(default=False)
 
     application_notes: "ReverseRelation[ApplicationNote]"
 
