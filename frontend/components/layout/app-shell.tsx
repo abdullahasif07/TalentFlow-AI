@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { DemoBanner } from "@/components/layout/demo-banner";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopHeader } from "@/components/layout/top-header";
 
@@ -39,6 +40,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </div>
       ) : null}
       <div className="min-h-screen lg:pl-64">
+        <DemoBanner />
         <TopHeader onOpenNavigation={() => setNavigationOpen(true)} />
         {children}
       </div>

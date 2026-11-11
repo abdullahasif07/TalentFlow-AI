@@ -4,22 +4,21 @@ import {
   BriefcaseBusiness,
   Columns3,
   LayoutDashboard,
+  LogOut,
   Sparkles,
-  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { initials, useSession } from "@/components/providers/session-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Jobs", href: "/jobs", icon: BriefcaseBusiness },
-  { label: "Candidates", href: "/candidates", icon: Users },
   { label: "Pipeline", href: "/pipeline", icon: Columns3 },
-  { label: "AI Activity", href: "/ai-activity", icon: Sparkles },
 ];
 
 interface SidebarProps {
@@ -29,6 +28,7 @@ interface SidebarProps {
 
 export function Sidebar({ mobile = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { recruiter, logout } = useSession();
 
   return (
     <aside
@@ -85,14 +85,25 @@ export function Sidebar({ mobile = false, onClose }: SidebarProps) {
       </nav>
 
       <div className="border-t border-sidebar-border p-4">
-        <button className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-sidebar-accent">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#dbe9e6] text-xs font-bold text-[#205f57]">AM</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-white">Alex Morgan</span>
-            <span className="block truncate text-xs text-sidebar-muted">Northstar Labs</span>
+        <div className="flex items-center gap-3 rounded-lg p-2">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#dbe9e6] text-xs font-bold text-[#205f57]">
+            {initials(recruiter?.name ?? "")}
           </span>
-          <span className="text-sidebar-muted" aria-hidden="true">•••</span>
-        </button>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-white">{recruiter?.name}</span>
+            <span className="block truncate text-xs text-sidebar-muted">{recruiter?.companyName}</span>
+          </span>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-sidebar-muted hover:bg-sidebar-accent hover:text-white"
+            onClick={() => void logout()}
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut />
+          </Button>
+        </div>
       </div>
     </aside>
   );
