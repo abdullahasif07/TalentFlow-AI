@@ -25,6 +25,7 @@ from app.db.models import (
 )
 from app.enums import AIProcessingState, ApplicationStatus, JobStatus
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter, isolate_from_redis
 from app.services.ai_processing import ProcessingRequest
 
 
@@ -43,6 +44,7 @@ def make_upload(
 
 class PublicApplicationGraphQLTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        isolate_from_redis(self)
         await Tortoise.init(
             db_url="sqlite://:memory:", modules={"models": ["app.db.models"]}
         )
@@ -131,7 +133,7 @@ class PublicApplicationGraphQLTests(unittest.IsolatedAsyncioTestCase):
                 success
                 application {
                   id candidateName jobTitle status submittedAt
-                  processingState processingMessage
+                  processingState processingMessage statusToken
                 }
                 errors { code message field }
               }
@@ -198,6 +200,7 @@ class PublicApplicationGraphQLTests(unittest.IsolatedAsyncioTestCase):
                 "submittedAt",
                 "processingState",
                 "processingMessage",
+                "statusToken",
             },
         )
         self.assertEqual(payload["application"]["status"], "APPLIED")
@@ -298,7 +301,7 @@ class PublicApplicationGraphQLTests(unittest.IsolatedAsyncioTestCase):
         enqueue.assert_called_once_with(int(application_id))
 
         recruiter_result = self.result_data(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query RecruiterApplicants($input: ApplicationsQueryInput!) {
                   applications(input: $input) {
@@ -476,6 +479,7 @@ class PublicApplicationGraphQLTests(unittest.IsolatedAsyncioTestCase):
                 "submittedAt",
                 "processingState",
                 "processingMessage",
+                "statusToken",
             },
         )
         self.assertNotIn("evaluationCriteria", public_job_fields)

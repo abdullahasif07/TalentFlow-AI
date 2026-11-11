@@ -20,6 +20,7 @@ from app.db.models import (
 )
 from app.enums import AIProcessingState, ApplicationStatus, JobStatus
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter, isolate_from_redis
 from app.services.ai.client import LLMClientError
 from app.services.application_query import RecruiterApplicationQueryService
 
@@ -193,6 +194,7 @@ mutation CompareCandidates($input: CompareCandidatesInput!) {
 
 class CandidateComparisonGraphQLTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        isolate_from_redis(self)
         await Tortoise.init(
             db_url="sqlite://:memory:", modules={"models": ["app.db.models"]}
         )
@@ -279,7 +281,7 @@ class CandidateComparisonGraphQLTests(unittest.IsolatedAsyncioTestCase):
             "app.services.ai.candidate_comparison.OpenAIStructuredOutputClient",
             return_value=selected_client,
         ):
-            result = await schema.execute(
+            result = await execute_as_recruiter(
                 COMPARE_MUTATION,
                 variable_values={
                     "input": {

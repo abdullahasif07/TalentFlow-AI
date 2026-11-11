@@ -10,6 +10,7 @@ from tortoise import Tortoise, connections
 from app.db.models import AIEvaluation, Application, Candidate, Company, Job, Resume
 from app.enums import AIProcessingState, EvaluationConfidence, JobStatus
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter, isolate_from_redis
 from app.services import RecruiterApplicationQueryService
 from app.worker import tasks as worker_tasks
 
@@ -76,6 +77,7 @@ def evaluation_analysis(score: int) -> dict[str, object]:
 
 class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        isolate_from_redis(self)
         await Tortoise.init(
             db_url="sqlite://:memory:", modules={"models": ["app.db.models"]}
         )
@@ -136,7 +138,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
             ) as evaluation_delay,
         ):
             result = self.assert_success(
-                await schema.execute(
+                await execute_as_recruiter(
                     """
                     mutation TriggerAI(
                       $criteria: GenerateJobCriteriaInput!
@@ -191,7 +193,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_resource_ids_are_cleanly_rejected(self) -> None:
         result = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 mutation {
                   generateJobCriteria(input: { jobId: "999999" }) {
@@ -228,7 +230,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
             side_effect=ConnectionError("broker unavailable"),
         ):
             payload = self.assert_success(
-                await schema.execute(
+                await execute_as_recruiter(
                     """
                     mutation($input: ProcessApplicationResumeInput!) {
                       processApplicationResume(input: $input) {
@@ -282,7 +284,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
             await self.create_evaluated_application(index=index, score=score)
 
         default_result = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: RecommendedCandidatesInput!) {
                   recommendedCandidates(input: $input) {
@@ -312,7 +314,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
         )
 
         limited = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: RecommendedCandidatesInput!) {
                   recommendedCandidates(input: $input) {
@@ -329,7 +331,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limited["limit"], 2)
 
         invalid_limit = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: RecommendedCandidatesInput!) {
                   recommendedCandidates(input: $input) {
@@ -394,7 +396,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
             return_value=SimpleNamespace(id="batch-task"),
         ) as delay:
             payload = self.assert_success(
-                await schema.execute(
+                await execute_as_recruiter(
                     """
                     mutation($input: ScreenJobApplicantsInput!) {
                       screenJobApplicants(input: $input) {
@@ -461,7 +463,7 @@ class AIGraphQLTests(unittest.IsolatedAsyncioTestCase):
         )
 
         payload = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: ApplicationQueryInput!) {
                   application(input: $input) {

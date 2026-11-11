@@ -15,6 +15,7 @@ from app.db.models import (
 )
 from app.enums import ApplicationStatus, JobStatus
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter
 
 
 class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
@@ -68,7 +69,7 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
         *,
         automated: bool = False,
     ) -> dict:
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             """
             mutation UpdateStatus($input: UpdateApplicationStatusInput!) {
               updateApplicationStatus(input: $input) {
@@ -82,8 +83,6 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
                 "input": {
                     "applicationId": str(application.id),
                     "status": status,
-                    "changedBy": "fallback-actor@example.com",
-                    "recruiterId": str(self.recruiter.id),
                     "automated": automated,
                 }
             },
@@ -131,7 +130,7 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
         await self.update_status(application, "HUMAN_REVIEW")
         await self.update_status(application, "SHORTLISTED")
 
-        note_result = await schema.execute(
+        note_result = await execute_as_recruiter(
             """
             mutation AddNote($input: AddApplicationNoteInput!) {
               addApplicationNote(input: $input) {
@@ -147,7 +146,6 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
             variable_values={
                 "input": {
                     "applicationId": str(application.id),
-                    "recruiterId": str(self.recruiter.id),
                     "content": "  Strong communication during the screen.  ",
                 }
             },
@@ -158,7 +156,7 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(note["note"]["recruiter"]["email"], self.recruiter.email)
         self.assertEqual(await ApplicationNote.filter(application_id=application.id).count(), 1)
 
-        detail_result = await schema.execute(
+        detail_result = await execute_as_recruiter(
             """
             query Detail($input: ApplicationQueryInput!) {
               application(input: $input) {
@@ -187,7 +185,7 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bulk_update_returns_successes_and_per_id_failures(self) -> None:
         first, second = self.applications[:2]
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             """
             mutation BulkUpdate($input: BulkUpdateApplicationStatusInput!) {
               bulkUpdateApplicationStatus(input: $input) {
@@ -202,8 +200,6 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
                 "input": {
                     "applicationIds": [str(first.id), str(second.id), "999999"],
                     "status": "INTERVIEW",
-                    "changedBy": self.recruiter.email,
-                    "recruiterId": str(self.recruiter.id),
                 }
             },
         )
@@ -226,6 +222,49 @@ class ApplicationPipelineTests(unittest.IsolatedAsyncioTestCase):
                 ).count(),
                 2,
             )
+
+
+    async def test_recruiter_from_another_company_cannot_update_or_annotate(self) -> None:
+        other_company = await Company.create(name="Other Company")
+        outsider = await Recruiter.create(
+            company=other_company,
+            name="Outside Recruiter",
+            email="outsider@other.example",
+            role="Recruiter",
+        )
+        application = self.applications[0]
+        update = await execute_as_recruiter(
+            """
+            mutation UpdateStatus($input: UpdateApplicationStatusInput!) {
+              updateApplicationStatus(input: $input) { success errors { code field } }
+            }
+            """,
+            variable_values={
+                "input": {"applicationId": str(application.id), "status": "HIRED"}
+            },
+            recruiter=outsider,
+        )
+        payload = self.assert_success(update)["updateApplicationStatus"]
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["errors"][0]["code"], "NOT_FOUND")
+
+        note = await execute_as_recruiter(
+            """
+            mutation AddNote($input: AddApplicationNoteInput!) {
+              addApplicationNote(input: $input) { success errors { code } }
+            }
+            """,
+            variable_values={
+                "input": {"applicationId": str(application.id), "content": "Hello"}
+            },
+            recruiter=outsider,
+        )
+        self.assertEqual(
+            self.assert_success(note)["addApplicationNote"]["errors"][0]["code"], "NOT_FOUND"
+        )
+        await application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.APPLIED)
+        self.assertEqual(await ApplicationNote.filter(application_id=application.id).count(), 0)
 
 
 if __name__ == "__main__":

@@ -13,11 +13,13 @@ from app.config import settings
 from app.db.models import Application, Candidate, Company, Job
 from app.enums import AIProcessingState, ApplicationStatus, JobStatus
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter, isolate_from_redis
 from app.services.ai_processing import ProcessingRequest
 
 
 class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        isolate_from_redis(self)
         await Tortoise.init(db_url="sqlite://:memory:", modules={"models": ["app.db.models"]})
         await Tortoise.generate_schemas()
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -48,7 +50,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_queries_use_input_and_result_types(self) -> None:
         jobs = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query {
                   jobs(input: { status: OPEN }) {
@@ -62,7 +64,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(jobs["totalCount"], 1)
 
         job = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: JobQueryInput!) {
                   job(input: $input) { success job { id title } errors { code message field } }
@@ -74,7 +76,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(job["success"])
 
         public_job = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: PublicJobQueryInput!) {
                   publicJob(input: $input) {
@@ -90,7 +92,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(public_job["success"])
 
         applications = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: ApplicationsQueryInput!) {
                   applications(input: $input) {
@@ -105,7 +107,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(applications["totalCount"], 1)
 
         application = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query($input: ApplicationQueryInput!) {
                   application(input: $input) {
@@ -119,7 +121,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(application["success"])
 
         missing = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 query {
                   job(input: { id: "999999" }) {
@@ -133,31 +135,41 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(missing["errors"][0]["code"], "NOT_FOUND")
 
     async def test_all_mutations_use_input_and_payload_types(self) -> None:
-        created = self.assert_success(
-            await schema.execute(
-                """
-                mutation($input: CreateJobInput!) {
-                  createJob(input: $input) {
-                    success job { id title status } errors { code message field }
-                  }
-                }
-                """,
-                variable_values={
-                    "input": {
-                        "companyId": str(self.company.id),
-                        "title": "Platform Engineer",
-                        "description": "Build platform infrastructure",
-                        "requiredSkills": ["Python"],
-                        "preferredSkills": ["PostgreSQL"],
-                        "status": "OPEN",
+        criteria_request = ProcessingRequest(
+            accepted=True,
+            resource_id=0,
+            state=AIProcessingState.PROCESSING,
+            message="Job criteria generation was queued.",
+        )
+        with patch(
+            "app.graphql.mutations.job.AIProcessingService.generate_job_criteria",
+            new=AsyncMock(return_value=criteria_request),
+        ) as generate_criteria:
+            created = self.assert_success(
+                await execute_as_recruiter(
+                    """
+                    mutation($input: CreateJobInput!) {
+                      createJob(input: $input) {
+                        success job { id title status } errors { code message field }
+                      }
                     }
-                },
-            )
-        )["createJob"]
-        self.assertTrue(created["success"])
+                    """,
+                    variable_values={
+                        "input": {
+                            "title": "Platform Engineer",
+                            "description": "Build platform infrastructure",
+                            "requiredSkills": ["Python"],
+                            "preferredSkills": ["PostgreSQL"],
+                            "status": "OPEN",
+                        }
+                    },
+                )
+            )["createJob"]
+            self.assertTrue(created["success"])
+        generate_criteria.assert_awaited_once_with(int(created["job"]["id"]))
 
         updated = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 mutation($input: UpdateApplicationStatusInput!) {
                   updateApplicationStatus(input: $input) {
@@ -169,7 +181,6 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
                     "input": {
                         "applicationId": str(self.application.id),
                         "status": "SHORTLISTED",
-                        "changedBy": "recruiter@example.com",
                     }
                 },
             )
@@ -195,7 +206,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             submitted = self.assert_success(
-                await schema.execute(
+                await execute_as_recruiter(
                     """
                     mutation($input: SubmitApplicationInput!) {
                       submitApplication(input: $input) {
@@ -229,7 +240,7 @@ class GraphQLContractTests(unittest.IsolatedAsyncioTestCase):
             headers=Headers({"content-type": "application/pdf"}),
         )
         duplicate = self.assert_success(
-            await schema.execute(
+            await execute_as_recruiter(
                 """
                 mutation($input: SubmitApplicationInput!) {
                   submitApplication(input: $input) {

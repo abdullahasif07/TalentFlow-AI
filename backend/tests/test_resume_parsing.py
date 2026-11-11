@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -201,13 +202,18 @@ class ResumeParsingTests(unittest.IsolatedAsyncioTestCase):
             model="test-structured-model",
         )
 
-        result = await client.generate_structured(
-            instructions="Extract facts only.",
-            input_text="Jordan Taylor uses Python.",
-            response_model=ParsedResume,
-        )
+        with patch(
+            "app.services.usage_guard.reserve_ai_call", new=AsyncMock()
+        ) as reserve:
+            result = await client.generate_structured(
+                instructions="Extract facts only.",
+                input_text="Jordan Taylor uses Python.",
+                response_model=ParsedResume,
+            )
 
         self.assertEqual(result, expected)
+        reserve.assert_awaited_once()
+        self.assertEqual(responses_api.arguments["max_output_tokens"], 6000)
         self.assertEqual(responses_api.arguments["model"], "test-structured-model")
         self.assertIs(responses_api.arguments["text_format"], ParsedResume)
         self.assertFalse(responses_api.arguments["store"])

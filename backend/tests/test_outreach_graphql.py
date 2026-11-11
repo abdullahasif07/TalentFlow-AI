@@ -16,6 +16,7 @@ from app.db.models import (
 )
 from app.enums import ApplicationStatus, JobStatus, OutreachStatus
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter, isolate_from_redis
 from app.services import ApplicationPipelineService
 from app.services.errors import OutreachApplicationNotFoundError
 
@@ -43,6 +44,7 @@ class FakeOutreachGenerationService:
 
 class OutreachGraphQLTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        isolate_from_redis(self)
         await Tortoise.init(
             db_url="sqlite://:memory:", modules={"models": ["app.db.models"]}
         )
@@ -87,7 +89,7 @@ class OutreachGraphQLTests(unittest.IsolatedAsyncioTestCase):
         input_type: str,
         input_value: dict[str, object],
     ) -> dict:
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             f"""
             mutation OutreachAction($input: {input_type}!) {{
               {field}(input: $input) {{
@@ -305,7 +307,7 @@ class OutreachGraphQLTests(unittest.IsolatedAsyncioTestCase):
         await older.save(update_fields=["generated_at"])
         newer = await self.create_outreach(subject="Newer draft")
 
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             """
             query ApplicationOutreach($input: ApplicationQueryInput!) {
               application(input: $input) {

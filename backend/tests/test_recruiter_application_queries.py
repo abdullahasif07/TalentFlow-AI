@@ -25,6 +25,7 @@ from app.enums import (
     OutreachStatus,
 )
 from app.graphql.schema import schema
+from auth_helpers import execute_as_recruiter
 from app.services import RecruiterApplicationQueryService
 
 
@@ -156,7 +157,7 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
         return data
 
     async def query_applications(self, input_value: dict) -> dict:
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             """
             query RecruiterApplications($input: ApplicationsQueryInput!) {
               applications(input: $input) {
@@ -287,7 +288,7 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_individual_application_detail(self) -> None:
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             """
             query ApplicationDetail($input: ApplicationQueryInput!) {
               application(input: $input) {
@@ -323,7 +324,7 @@ class RecruiterApplicationQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(application["outreachEmails"][0]["status"], "DRAFT")
 
     async def test_job_statistics(self) -> None:
-        result = await schema.execute(
+        result = await execute_as_recruiter(
             """
             query JobStatistics($input: JobQueryInput!) {
               job(input: $input) {
