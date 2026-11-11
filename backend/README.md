@@ -41,11 +41,19 @@ cd backend
    # Later: aerich migrate --name describe_change && aerich upgrade
    ```
 
-5. Insert demo data (the script is safe to run repeatedly):
+5. Create the demo company, logins, and sample data (safe to run repeatedly):
 
    ```bash
    python -m scripts.seed
    ```
+
+   This creates the demo recruiter (`demo@northstar.example.com` / `demo-recruiter` by default),
+   an optional private admin login when `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, four jobs, and
+   twelve fictional applicants with resumes, AI evaluations, notes, and pipeline history. Two
+   applicants are deliberately left unscored so "Screen unscored applicants" has work to do.
+   If the database already has jobs, no demo data is added; replace everything with a fresh
+   copy using `python -m scripts.reset_demo --yes` (requires `DEMO_MODE=true`; it deletes all
+   applicants).
 
 6. Start FastAPI:
 
@@ -70,6 +78,9 @@ virtual environment active:
 ```bash
 celery -A app.worker.celery_app:celery_app worker --loglevel=INFO
 ```
+
+Add `-B` to also run Celery beat, which resets the demo data every night at
+`DEMO_RESET_HOUR_UTC` while `DEMO_MODE=true`.
 
 In another terminal, confirm that the worker responds:
 
@@ -100,6 +111,44 @@ changing pipeline status. Run resume and criteria processing before evaluation.
 Worker tasks use a fresh async event loop and Tortoise connection lifecycle for each execution.
 Temporary database or AI-provider failures use bounded exponential retries. Missing records,
 invalid PDFs, absent prerequisite data, and invalid structured output fail without being retried.
+
+## Authentication and access control
+
+Recruiters sign in through small REST endpoints that set an HTTP-only, `SameSite=Lax` session
+cookie signed with `SESSION_SECRET`:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /auth/login` | Email and password sign-in (rate limited per IP) |
+| `POST /auth/demo` | One-click demo sign-in, only when `DEMO_MODE=true` |
+| `POST /auth/logout` | Clears the session cookie |
+| `GET /auth/me` | Returns the signed-in recruiter, or 401 |
+| `GET /auth/config` | Tells the frontend whether demo mode is on |
+| `GET /applications/{id}/resume` | Streams a stored resume PDF to a signed-in recruiter |
+
+Every GraphQL field requires a signed-in recruiter except `publicJob`, `publicJobs`,
+`publicApplicationStatus`, and `submitApplication`. A test enforces this, so a new field is
+private unless it is deliberately added to the public list. Recruiters only see jobs and
+applications that belong to their own company; status changes and notes are recorded against
+the signed-in recruiter, so clients no longer send `changedBy`, `recruiterId`, or `companyId`.
+
+Passwords are hashed with scrypt. The GraphQL IDE is enabled in development and disabled when
+`APP_ENV=production` (override with `GRAPHQL_IDE_ENABLED`).
+
+## Cost and abuse protection
+
+- **Daily AI budget.** Every OpenAI request is counted in Redis against `AI_DAILY_CALL_LIMIT`.
+  When the budget is spent, AI work is refused with a `RATE_LIMITED` error, queued tasks stop
+  without retrying, and new applications are still accepted for manual review. If Redis is
+  unreachable, paid AI calls are blocked rather than left uncounted.
+- **Application limits.** `submitApplication` allows `APPLICATION_RATE_LIMIT_PER_HOUR`
+  submissions per IP and rejects a hidden honeypot field (`website`) that bots fill in.
+- **Bounded requests.** Resume text sent to the model is capped at `RESUME_TEXT_MAX_CHARS`,
+  and responses at `AI_MAX_OUTPUT_TOKENS`.
+- **No repeated work.** Completed resumes and evaluations are reused, and identical candidate
+  comparisons are served from a Redis cache until an input evaluation or the job changes.
+
+Set a monthly spending limit in your OpenAI account as a final backstop.
 
 ## AI processing GraphQL operations
 
@@ -230,7 +279,11 @@ score. Expected comparison errors are returned through the typed `errors` payloa
 - PDF text extraction, structured resume parsing, job rubrics, and evidence-based candidate scoring
 - Read-only, job-specific comparison of 2–5 evaluated Applications
 - Redis-backed Celery tasks for independent resume, criteria, and evaluation processing
-- No automatic ranking, authentication, or frontend workflow yet
+- New jobs generate an AI rubric automatically, then score any applicants who were waiting
+- Cookie-based recruiter authentication with company-scoped data access
+- Daily AI budget, per-IP rate limits, honeypot spam protection, and a comparison cache
+- Applicant-facing progress tracking through a signed status token
+- Demo mode with one-click login, seeded data, and a nightly reset
 
 ## Example operations
 
@@ -316,7 +369,6 @@ query JobStatistics {
 
 mutation CreateJob {
   createJob(input: {
-    companyId: "1"
     title: "Engineering Manager"
     description: "Lead a product engineering team."
     requiredSkills: ["Engineering leadership", "System design"]
@@ -333,8 +385,6 @@ mutation UpdateApplicationStatus {
   updateApplicationStatus(input: {
     applicationId: "1"
     status: SHORTLISTED
-    changedBy: "maya.patel@northstar.example.com"
-    recruiterId: "1"
   }) {
     success
     application { id status updatedAt }
@@ -345,7 +395,6 @@ mutation UpdateApplicationStatus {
 mutation AddApplicationNote {
   addApplicationNote(input: {
     applicationId: "1"
-    recruiterId: "1"
     content: "Strong communication during the initial screen."
   }) {
     success
@@ -358,8 +407,6 @@ mutation BulkUpdateApplicationStatus {
   bulkUpdateApplicationStatus(input: {
     applicationIds: ["1", "2", "3"]
     status: INTERVIEW
-    changedBy: "maya.patel@northstar.example.com"
-    recruiterId: "1"
   }) {
     success
     applications { id status }
@@ -415,7 +462,7 @@ With the API running and an open job whose ID is `1`, test the mutation from ano
 
 ```bash
 curl http://localhost:8000/graphql \
-  -F 'operations={"query":"mutation Submit($input: SubmitApplicationInput!) { submitApplication(input: $input) { success application { id candidateName jobTitle status submittedAt processingState processingMessage } errors { code message field } } }","variables":{"input":{"jobId":"1","fullName":"Jordan Taylor","email":"jordan@example.com","phone":"+1 415 555 0142","linkedinUrl":"https://linkedin.com/in/jordan-taylor","githubUrl":"https://github.com/jordantaylor","portfolioUrl":"https://jordantaylor.example.com","coverLetter":"I am excited to apply for this role.","resume":null}}}' \
+  -F 'operations={"query":"mutation Submit($input: SubmitApplicationInput!) { submitApplication(input: $input) { success application { id candidateName jobTitle status submittedAt processingState processingMessage statusToken } errors { code message field } } }","variables":{"input":{"jobId":"1","fullName":"Jordan Taylor","email":"jordan@example.com","phone":"+1 415 555 0142","linkedinUrl":"https://linkedin.com/in/jordan-taylor","githubUrl":"https://github.com/jordantaylor","portfolioUrl":"https://jordantaylor.example.com","coverLetter":"I am excited to apply for this role.","resume":null}}}' \
   -F 'map={"0":["variables.input.resume"]}' \
   -F '0=@/absolute/path/to/resume.pdf;type=application/pdf'
 ```
@@ -431,10 +478,14 @@ then queues the existing candidate-evaluation task when the Job already has eval
 Repeated resume-task execution does not requeue an evaluation that is already processing or
 complete. Keep Redis and the Celery worker running to execute this background work.
 
-`publicJob` and `submitApplication` intentionally require no recruiter identity. The project does
-not yet have authentication middleware, so recruiter-only GraphQL operations also remain
-unauthenticated until the planned authentication work is added; the public types themselves are
-kept narrow so these operations do not leak internal fields.
+`publicJob`, `publicJobs`, `publicApplicationStatus`, and `submitApplication` require no
+recruiter identity. The public types stay narrow so these operations never expose internal
+fields. The receipt includes a signed `statusToken`; pass it to `publicApplicationStatus` to
+read coarse progress (`RECEIVED`, `READING_RESUME`, `SCORING`, `COMPLETE`, or
+`NEEDS_MANUAL_REVIEW`) without exposing scores or the guessable application ID.
+
+The examples above that call recruiter operations need a session cookie. In the GraphQL IDE,
+sign in first by sending `POST /auth/demo` (or `/auth/login`) from the same browser.
 
 Run the submission tests with:
 

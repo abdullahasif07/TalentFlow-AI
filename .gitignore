@@ -27,3 +27,6 @@ yarn-debug.log*
 yarn-error.log*
 .idea/
 .vscode/
+
+# Database backups (make db-backup)
+backups/
