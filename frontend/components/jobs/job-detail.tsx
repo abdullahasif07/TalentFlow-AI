@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { AIScreeningPanel } from "@/components/jobs/ai-screening-panel";
 import { ApplicationLinkActions } from "@/components/jobs/application-link-actions";
 import { JobApplicants } from "@/components/jobs/job-applicants";
 import { JobInformation } from "@/components/jobs/job-information";
@@ -31,10 +32,18 @@ type JobTab = "APPLICANTS" | "RECOMMENDED" | "DETAILS";
 
 export function JobDetail({ jobId }: { jobId: string }) {
   const [activeTab, setActiveTab] = useState<JobTab>("APPLICANTS");
-  const { data, loading, error, refetch } = useQuery<JobQueryData>(GET_JOB, {
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<JobQueryData>(GET_JOB, {
     variables: { input: { id: jobId } },
     fetchPolicy: "cache-and-network",
   });
+  const criteriaProcessing = data?.job.job?.criteriaProcessingState === "PROCESSING";
+
+  useEffect(() => {
+    // While the rubric is generated, poll so the panel updates without a reload.
+    if (!criteriaProcessing) return;
+    startPolling(3_000);
+    return () => stopPolling();
+  }, [criteriaProcessing, startPolling, stopPolling]);
 
   useEffect(() => {
     const refreshOnFocus = () => void refetch();
@@ -120,9 +129,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
           </div>
           <div className="flex flex-col items-start gap-3 xl:items-end">
             {job.status === "OPEN" ? <ApplicationLinkActions jobId={job.id} /> : null}
-            <Badge variant="outline" className="border-[#d7e8e3] bg-[#eef7f4] text-primary">
-              <Sparkles className="size-3.5" /> AI criteria: {job.criteriaProcessingState.replaceAll("_", " ").toLowerCase()}
-            </Badge>
+            <AIScreeningPanel job={job} onQueued={() => void refetch()} />
           </div>
         </div>
 

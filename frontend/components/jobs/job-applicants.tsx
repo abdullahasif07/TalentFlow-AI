@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { ApplicationProcessingBadge } from "@/components/shared/application-processing-badge";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -108,7 +108,7 @@ export function JobApplicants({
     return () => window.clearTimeout(timeout);
   }, [search]);
 
-  const { data, loading, error, refetch } = useQuery<JobApplicationsQueryData>(
+  const { data, loading, error, refetch, startPolling, stopPolling } = useQuery<JobApplicationsQueryData>(
     GET_JOB_APPLICATIONS,
     {
       variables: {
@@ -144,6 +144,28 @@ export function JobApplicants({
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [refetch]);
+
+  const hasProcessingApplicants = Boolean(
+    data?.applications.items.some(
+      (application) =>
+        application.evaluationProcessingState === "PROCESSING" ||
+        application.resume?.processingState === "PROCESSING",
+    ),
+  );
+  const onRefreshJobRef = useRef(onRefreshJob);
+  useEffect(() => {
+    onRefreshJobRef.current = onRefreshJob;
+  }, [onRefreshJob]);
+  useEffect(() => {
+    // Keep scores and processing badges live while AI work is running, then refresh
+    // the job's counters once it finishes.
+    if (!hasProcessingApplicants) return;
+    startPolling(4_000);
+    return () => {
+      stopPolling();
+      onRefreshJobRef.current?.();
+    };
+  }, [hasProcessingApplicants, startPolling, stopPolling]);
 
   function refreshApplicants() {
     void refetch();

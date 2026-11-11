@@ -20,7 +20,7 @@ import { LoadingState } from "@/components/shared/loading-state";
 import { SectionHeader } from "@/components/shared/section-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -163,9 +163,9 @@ export function DashboardOverview() {
               Monitor active roles and candidate progress across your hiring pipeline.
             </p>
           </div>
-          <Button disabled title="Job creation will be available soon">
-            <Plus /> Create Job
-          </Button>
+          <Link href="/jobs/new" className={buttonVariants()}>
+            <Plus /> Create job
+          </Link>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

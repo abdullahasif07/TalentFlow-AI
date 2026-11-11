@@ -1,0 +1,98 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Length 1597 >>
+stream
+BT
+56 736 Td
+14 TL
+/F2 12 Tf
+(Jordan Taylor \(Sample Candidate\)) '
+/F1 10 Tf
+(jordan.taylor@example.com | +1 415 555 0142 | github.com/jordantaylor-sample) '
+/F1 10 Tf
+() '
+/F2 12 Tf
+(Summary) '
+/F1 10 Tf
+(Backend engineer with 6 years of experience building Python APIs, data models, and cloud) '
+/F1 10 Tf
+(  services for B2B SaaS products.) '
+/F1 10 Tf
+() '
+/F2 12 Tf
+(Experience) '
+/F1 10 Tf
+(Senior Software Engineer, Lumen Workflows \(2022-01 - Present\)) '
+/F1 10 Tf
+(Built FastAPI services handling 8M requests/day; designed PostgreSQL schemas and cut slow-) '
+/F1 10 Tf
+(  query volume by 70% with indexing and query rewrites; introduced GraphQL for the customer) '
+/F1 10 Tf
+(  dashboard; mentored three engineers.) '
+/F1 10 Tf
+(Technologies: Python, FastAPI, PostgreSQL, GraphQL, Redis, AWS) '
+/F1 10 Tf
+() '
+/F1 10 Tf
+(Software Engineer, Harbor Analytics \(2019-06 - 2021-12\)) '
+/F1 10 Tf
+(Developed Django REST APIs and Celery pipelines for reporting; containerized services with) '
+/F1 10 Tf
+(  Docker and moved deployments to AWS ECS.) '
+/F1 10 Tf
+(Technologies: Python, Django, Celery, Docker, AWS) '
+/F1 10 Tf
+() '
+/F2 12 Tf
+(Skills) '
+/F1 10 Tf
+(Python, FastAPI, PostgreSQL, GraphQL, Docker, AWS, Redis, Celery, system design, code review) '
+/F1 10 Tf
+() '
+/F2 12 Tf
+(Education) '
+/F1 10 Tf
+(B.S. in Computer Science, University of Texas at Austin) '
+/F1 10 Tf
+() '
+/F2 12 Tf
+(Projects) '
+/F1 10 Tf
+(queue-metrics: open-source Celery queue monitoring dashboard built with FastAPI.) '
+/F1 10 Tf
+() '
+/F1 10 Tf
+(This is a fictional resume for trying the TalentFlow AI demo.) '
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000266 00000 n 
+0000001915 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2051
+%%EOF

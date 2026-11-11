@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Plus } from "lucide-react";
+import Link from "next/link";
 
 import { JobList } from "@/components/jobs/job-list";
 import { PageContainer } from "@/components/shared/page-container";
 import { SectionHeader } from "@/components/shared/section-header";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Jobs" };
 
@@ -15,9 +16,9 @@ export default function JobsPage() {
         title="Jobs"
         description="Manage open roles and follow hiring progress from one place."
         action={
-          <Button disabled title="Job creation will be available soon">
-            <Plus /> Create Job
-          </Button>
+          <Link href="/jobs/new" className={buttonVariants()}>
+            <Plus /> Create job
+          </Link>
         }
         className="mb-6"
       />

@@ -1,8 +1,9 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, LoaderCircle, Send } from "lucide-react";
+import { AlertCircle, Download, FlaskConical, LoaderCircle, Send } from "lucide-react";
 import { useState } from "react";
 
+import { ApplicationProgress } from "@/components/public-application/application-progress";
 import { ResumeUpload } from "@/components/public-application/resume-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,41 +78,7 @@ function Field({ id, label, required, helper, error, children }: FieldProps) {
   );
 }
 
-function SuccessState({ receipt }: { receipt: PublicApplicationReceipt }) {
-  return (
-    <div className="flex min-h-[520px] flex-col items-center justify-center px-5 py-12 text-center sm:px-10">
-      <span className="flex size-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-        <CheckCircle2 className="size-7" aria-hidden="true" />
-      </span>
-      <h2 className="mt-5 text-2xl font-semibold tracking-tight">
-        Application submitted successfully
-      </h2>
-      <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-        Your application for <span className="font-semibold text-foreground">{receipt.jobTitle}</span>{" "}
-        has been received and will be reviewed by the recruiting team.
-      </p>
-      <div className="mt-7 grid w-full max-w-md gap-3 rounded-xl border bg-muted/20 p-4 text-left sm:grid-cols-2">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Status
-          </p>
-          <p className="mt-1 text-sm font-semibold text-emerald-700">Received</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-            Reference
-          </p>
-          <p className="mt-1 text-sm font-semibold">Application #{receipt.id}</p>
-        </div>
-      </div>
-      <p className="mt-5 max-w-md text-xs leading-5 text-muted-foreground">
-        You can safely close this page. Please keep your application reference for your records.
-      </p>
-    </div>
-  );
-}
-
-export function ApplicationForm({ jobId }: { jobId: string }) {
+export function ApplicationForm({ jobId, demoMode }: { jobId: string; demoMode: boolean }) {
   const maxSizeMb = configuredMaxResumeSizeMb(
     process.env.NEXT_PUBLIC_MAX_RESUME_SIZE_MB,
   );
@@ -122,6 +89,7 @@ export function ApplicationForm({ jobId }: { jobId: string }) {
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<PublicApplicationReceipt | null>(null);
+  const [honeypot, setHoneypot] = useState("");
 
   function updateField(field: keyof PublicApplicationValues, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
@@ -160,6 +128,7 @@ export function ApplicationForm({ jobId }: { jobId: string }) {
         jobId,
         ...values,
         resume,
+        website: honeypot,
       });
       if (!payload.success || !payload.application) {
         const backendError = payload.errors[0];
@@ -182,10 +151,10 @@ export function ApplicationForm({ jobId }: { jobId: string }) {
     }
   }
 
-  if (receipt) return <SuccessState receipt={receipt} />;
+  if (receipt) return <ApplicationProgress receipt={receipt} />;
 
   return (
-    <form className="p-5 sm:p-7 lg:p-8" noValidate onSubmit={(event) => void handleSubmit(event)}>
+    <form className="relative p-5 sm:p-7 lg:p-8" noValidate onSubmit={(event) => void handleSubmit(event)}>
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.1em] text-primary">Application</p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
@@ -194,6 +163,40 @@ export function ApplicationForm({ jobId }: { jobId: string }) {
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Fields marked with an asterisk are required.
         </p>
+      </div>
+
+      {demoMode ? (
+        <div className="mt-6 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <FlaskConical className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">This is a demo - please use sample details.</p>
+            <p className="mt-1 text-xs leading-5">
+              Don’t submit your real resume. Applications are visible to anyone using the demo
+              recruiter account and are deleted nightly.
+            </p>
+            <a
+              href="/sample-resume.pdf"
+              download
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold underline underline-offset-2"
+            >
+              <Download className="size-3.5" aria-hidden="true" /> Download a sample resume
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Honeypot: hidden from people and assistive technology; bots tend to fill it. */}
+      <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+        <label htmlFor="website">Website</label>
+        <input
+          id="website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={honeypot}
+          onChange={(event) => setHoneypot(event.target.value)}
+        />
       </div>
 
       {submissionError ? (

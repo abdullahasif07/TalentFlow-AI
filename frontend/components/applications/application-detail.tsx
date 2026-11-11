@@ -211,6 +211,7 @@ export function ApplicationDetailPage({
           ) : null}
 
           <ResumeOverview
+            applicationId={application.id}
             resume={application.resume}
             fallbackFileUrl={application.resumeUrl}
           />

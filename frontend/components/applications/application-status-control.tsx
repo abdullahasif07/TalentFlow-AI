@@ -24,8 +24,6 @@ import {
 } from "@/lib/graphql/applications";
 import { graphQLErrorMessage } from "@/lib/graphql/errors";
 
-const CURRENT_RECRUITER = "Alex Morgan";
-
 const suggestedNextStatus: Partial<Record<ApplicationStatus, ApplicationStatus>> = {
   APPLIED: "HUMAN_REVIEW",
   AI_REVIEWED: "HUMAN_REVIEW",
@@ -83,7 +81,6 @@ export function ApplicationStatusControl({
       input: {
         applicationId: string;
         status: ApplicationStatus;
-        changedBy: string;
         automated: boolean;
       };
     }
@@ -123,7 +120,6 @@ export function ApplicationStatusControl({
           input: {
             applicationId,
             status,
-            changedBy: CURRENT_RECRUITER,
             automated: false,
           },
         },

@@ -55,7 +55,6 @@ const PIPELINE_STATUSES: ApplicationStatus[] = [
   "OFFER",
   "HIRED",
 ];
-const CURRENT_RECRUITER = "Alex Morgan";
 const PIPELINE_PAGE_SIZE = 100;
 
 type EvaluationFilter = "ALL" | "EVALUATED" | "NOT_EVALUATED";
@@ -80,7 +79,6 @@ interface StatusMutationVariables {
   input: {
     applicationId: string;
     status: ApplicationStatus;
-    changedBy: string;
     automated: false;
   };
 }
@@ -275,7 +273,6 @@ export function HiringPipelineBoard() {
           input: {
             applicationId,
             status: destination,
-            changedBy: CURRENT_RECRUITER,
             automated: false,
           },
         },

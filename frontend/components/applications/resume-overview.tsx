@@ -12,13 +12,13 @@ import { ProcessingStateBadge } from "@/components/shared/processing-state-badge
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { resumeDownloadUrl } from "@/lib/api";
 import type { ApplicationDetail } from "@/lib/graphql/applications";
 import {
   externalHttpUrl,
   normalizeParsedResume,
   resumeFilename,
 } from "@/lib/resume";
-import { cn } from "@/lib/utils";
 
 type Resume = ApplicationDetail["resume"];
 
@@ -46,14 +46,18 @@ function ProcessingMessage({ state }: { state: NonNullable<Resume>["processingSt
 }
 
 export function ResumeOverview({
+  applicationId,
   resume,
   fallbackFileUrl,
 }: {
+  applicationId: string;
   resume: Resume;
   fallbackFileUrl: string | null;
 }) {
   const fileUrl = resume?.fileUrl ?? fallbackFileUrl;
-  const publicFileUrl = externalHttpUrl(fileUrl);
+  // Stored uploads are served by the authenticated API; legacy records may hold a URL.
+  const publicFileUrl =
+    externalHttpUrl(fileUrl) ?? (fileUrl ? resumeDownloadUrl(applicationId) : null);
   const parsed = normalizeParsedResume(resume?.parsedData);
   const state = resume?.processingState ?? "NOT_STARTED";
 
@@ -82,13 +86,6 @@ export function ResumeOverview({
             >
               Open resume <ExternalLink />
             </a>
-          ) : fileUrl ? (
-            <span
-              title="Local resume downloads are not exposed by the backend yet"
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-not-allowed opacity-50")}
-            >
-              File stored locally
-            </span>
           ) : null}
         </div>
       </CardHeader>

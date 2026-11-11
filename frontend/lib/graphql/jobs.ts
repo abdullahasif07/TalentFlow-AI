@@ -132,3 +132,102 @@ export function formatDateTime(value: string) {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+export const CREATE_JOB = gql`
+  mutation CreateJob($input: CreateJobInput!) {
+    createJob(input: $input) {
+      success
+      errors {
+        code
+        message
+        field
+      }
+      job {
+        ...RecruiterJobFields
+      }
+    }
+  }
+  ${JOB_FIELDS}
+`;
+
+export const GENERATE_JOB_CRITERIA = gql`
+  mutation GenerateJobCriteria($input: GenerateJobCriteriaInput!) {
+    generateJobCriteria(input: $input) {
+      success
+      accepted
+      state
+      message
+      errors {
+        code
+        message
+        field
+      }
+    }
+  }
+`;
+
+export const SCREEN_JOB_APPLICANTS = gql`
+  mutation ScreenJobApplicants($input: ScreenJobApplicantsInput!) {
+    screenJobApplicants(input: $input) {
+      success
+      accepted
+      queuedCount
+      message
+      errors {
+        code
+        message
+        field
+      }
+    }
+  }
+`;
+
+export interface CreateJobInput {
+  title: string;
+  description: string;
+  requiredSkills: string[];
+  preferredSkills: string[];
+  experienceRequirement: string | null;
+  status: JobStatus;
+}
+
+export interface CreateJobData {
+  createJob: {
+    success: boolean;
+    job: RecruiterJob | null;
+    errors: OperationError[];
+  };
+}
+
+export interface GenerateJobCriteriaData {
+  generateJobCriteria: {
+    success: boolean;
+    accepted: boolean;
+    state: ProcessingState;
+    message: string;
+    errors: OperationError[];
+  };
+}
+
+export interface ScreenJobApplicantsData {
+  screenJobApplicants: {
+    success: boolean;
+    accepted: boolean;
+    queuedCount: number;
+    message: string;
+    errors: OperationError[];
+  };
+}
+
+/** Split a comma- or newline-separated skill list into unique, trimmed entries. */
+export function parseSkillList(value: string): string[] {
+  const seen = new Set<string>();
+  const skills: string[] = [];
+  for (const raw of value.split(/[,\n]/)) {
+    const skill = raw.trim();
+    if (!skill || seen.has(skill.toLowerCase())) continue;
+    seen.add(skill.toLowerCase());
+    skills.push(skill);
+  }
+  return skills;
+}

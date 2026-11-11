@@ -16,6 +16,7 @@ const SUBMIT_PUBLIC_APPLICATION = `
         submittedAt
         processingState
         processingMessage
+        statusToken
       }
       errors {
         code
@@ -34,6 +35,7 @@ export interface PublicApplicationReceipt {
   submittedAt: string;
   processingState: "NOT_STARTED" | "PROCESSING" | "COMPLETED" | "FAILED";
   processingMessage: string;
+  statusToken: string;
 }
 
 export interface PublicSubmissionError {
@@ -56,6 +58,8 @@ interface GraphQLSubmissionResponse {
 export interface SubmitPublicApplicationInput extends PublicApplicationValues {
   jobId: string;
   resume: File;
+  /** Honeypot value from a field hidden from people; real applicants leave it empty. */
+  website?: string;
 }
 
 type Fetcher = typeof fetch;
@@ -78,6 +82,7 @@ export async function submitPublicApplication(
         githubUrl: input.githubUrl.trim() || null,
         portfolioUrl: input.portfolioUrl.trim() || null,
         coverLetter: input.coverLetter.trim(),
+        website: input.website?.trim() || null,
         resume: null,
       },
     },
@@ -136,6 +141,8 @@ export function publicSubmissionErrorMessage(error: PublicSubmissionError) {
       return "Please attach a valid, non-empty PDF resume.";
     case "FILE_TOO_LARGE":
       return error.message || "The selected resume is too large.";
+    case "RATE_LIMITED":
+      return error.message || "Too many applications were submitted. Please try again later.";
     case "VALIDATION_ERROR":
       return error.message || "Please review the highlighted application details.";
     default:

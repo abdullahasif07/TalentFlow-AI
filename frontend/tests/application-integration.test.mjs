@@ -53,3 +53,13 @@ test("fit scores are visible only after evaluation completes", () => {
   assert.equal(completedFitScore(null, "COMPLETED"), null);
   assert.equal(completedFitScore("invalid", "COMPLETED"), null);
 });
+
+test("job skill lists are trimmed, de-duplicated, and split on commas or newlines", async () => {
+  const { parseSkillList } = await import("../lib/graphql/jobs.ts");
+  assert.deepEqual(parseSkillList(" Python, FastAPI ,python\nPostgreSQL,, "), [
+    "Python",
+    "FastAPI",
+    "PostgreSQL",
+  ]);
+  assert.deepEqual(parseSkillList("   "), []);
+});

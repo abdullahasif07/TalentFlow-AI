@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@apollo/client/react";
+import Link from "next/link";
 import {
   ArrowUpRight,
   BriefcaseBusiness,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { ApplicationForm } from "@/components/public-application/application-form";
+import { useDemoMode } from "@/components/public-application/use-demo-mode";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,12 +37,12 @@ function PublicHeader() {
   return (
     <header className="border-b bg-white/95">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <BriefcaseBusiness className="size-4.5" aria-hidden="true" />
           </span>
           <span className="font-semibold tracking-tight">TalentFlow AI</span>
-        </div>
+        </Link>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           Secure candidate application
         </span>
@@ -101,6 +103,7 @@ function UnavailableJob({ message, onRetry }: { message: string; onRetry?: () =>
 }
 
 export function PublicApplicationPage({ jobId }: { jobId: string }) {
+  const demoMode = useDemoMode();
   const validJobId = /^\d+$/.test(jobId) && Number(jobId) > 0;
   const { data, loading, error, refetch } = useQuery<PublicJobQueryData>(GET_PUBLIC_JOB, {
     variables: { input: { id: jobId } },
@@ -214,7 +217,7 @@ export function PublicApplicationPage({ jobId }: { jobId: string }) {
         </section>
 
         <section className="overflow-hidden rounded-2xl border bg-card shadow-[0_16px_45px_rgba(23,32,51,0.06)]">
-          <ApplicationForm jobId={job.id} />
+          <ApplicationForm jobId={job.id} demoMode={demoMode} />
         </section>
       </main>
       <footer className="border-t bg-white/60">
