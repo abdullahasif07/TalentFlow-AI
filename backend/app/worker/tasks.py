@@ -17,6 +17,7 @@ from app.services.ai.resume_parser import ResumeParsingService
 from app.services.ai_processing import AIProcessingService
 from app.services.errors import (
     AIProcessingRequestError,
+    AIUsageLimitError,
     CandidateEvaluationError,
     CandidateEvaluationProviderError,
     EvaluationApplicationNotFoundError,
@@ -125,9 +126,22 @@ async def process_resume_workflow(application_id: int) -> dict[str, Any]:
 
 async def generate_job_criteria_workflow(job_id: int) -> dict[str, Any]:
     criteria = await JobCriteriaService().generate_and_save(job_id)
+
+    # Applicants whose resumes were parsed before the rubric existed are waiting for
+    # it; score them now so no applicant is left without an evaluation.
+    screened_count = 0
+    try:
+        screening = await AIProcessingService.screen_job_applicants(job_id)
+        screened_count = len(screening.accepted_application_ids)
+    except AIProcessingRequestError as exc:
+        logger.warning("Applicant screening was not queued for job_id=%s: %s", job_id, exc)
+    except Exception:
+        logger.exception("Unexpected screening enqueue failure for job_id=%s", job_id)
+
     return {
         "job_id": job_id,
         "category_count": len(criteria.evaluation_categories),
+        "screened_application_count": screened_count,
         "status": "generated",
     }
 
@@ -150,31 +164,40 @@ def _execute_task(
 ) -> dict[str, Any]:
     try:
         result = run_async_db_operation(operation)
-    except TransientTaskError as exc:
-        retry_number = int(task.request.retries)
-        countdown = min(
-            settings.celery_retry_backoff_seconds * (2**retry_number),
-            300,
-        )
-        logger.warning(
-            "%s task failed temporarily for %s=%s; retrying in %ss: %s",
-            task.name,
-            entity_name,
-            entity_id,
-            countdown,
-            exc,
-        )
-        raise task.retry(exc=exc, countdown=countdown) from exc
-    except PermanentTaskError as exc:
-        logger.error(
-            "%s task rejected for %s=%s: %s",
-            task.name,
-            entity_name,
-            entity_id,
-            exc,
-        )
-        raise
-    except Exception:
+    except Exception as exc:
+        if _caused_by_usage_limit(exc):
+            # Retrying cannot succeed until the daily budget resets.
+            logger.warning(
+                "%s task skipped for %s=%s because the daily AI budget is exhausted.",
+                task.name,
+                entity_name,
+                entity_id,
+            )
+            raise AIUsageLimitError(str(exc)) from exc
+        if isinstance(exc, TransientTaskError):
+            retry_number = int(task.request.retries)
+            countdown = min(
+                settings.celery_retry_backoff_seconds * (2**retry_number),
+                300,
+            )
+            logger.warning(
+                "%s task failed temporarily for %s=%s; retrying in %ss: %s",
+                task.name,
+                entity_name,
+                entity_id,
+                countdown,
+                exc,
+            )
+            raise task.retry(exc=exc, countdown=countdown) from exc
+        if isinstance(exc, PermanentTaskError):
+            logger.error(
+                "%s task rejected for %s=%s: %s",
+                task.name,
+                entity_name,
+                entity_id,
+                exc,
+            )
+            raise
         logger.exception(
             "%s task failed unexpectedly for %s=%s",
             task.name,
@@ -190,6 +213,17 @@ def _execute_task(
         entity_id,
     )
     return result
+
+
+def _caused_by_usage_limit(exc: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, AIUsageLimitError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _execute_tracked_task(
@@ -284,3 +318,19 @@ def evaluate_application(task: Any, application_id: int) -> dict[str, Any]:
         entity_name="application_id",
         entity_id=application_id,
     )
+
+
+@celery_app.task(name="talentflow.reset_demo_data")
+def reset_demo_data_task() -> dict[str, Any]:
+    from app.demo.seed import reset_demo_data
+
+    if not settings.demo_mode:
+        logger.info("Skipping demo reset because DEMO_MODE is disabled.")
+        return {"status": "skipped"}
+    summary = run_async_db_operation(reset_demo_data)
+    return {
+        "status": "reset",
+        "jobs": summary.jobs,
+        "applications": summary.applications,
+        "evaluated": summary.evaluated,
+    }

@@ -250,6 +250,22 @@ class ProcessingQueueError(AIProcessingRequestError):
     pass
 
 
+class AIUsageLimitError(AIProcessingRequestError):
+    """AI work was refused to protect the daily AI budget."""
+
+
+class AIBudgetExceededError(AIUsageLimitError):
+    pass
+
+
+class AIBudgetUnavailableError(AIUsageLimitError):
+    pass
+
+
+class RateLimitExceededError(Exception):
+    pass
+
+
 class ApplicationPipelineError(Exception):
     """Base exception for safe, client-facing pipeline errors."""
 

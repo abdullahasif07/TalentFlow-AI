@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from app.db.models import Resume
 from app.enums import AIProcessingState
+from app.config import settings
 from app.schemas import ParsedResume
 from app.services.ai.client import (
     LLMClientError,
@@ -52,6 +53,9 @@ class ResumeParsingService:
         normalized_text = raw_text.strip() if raw_text else ""
         if not normalized_text:
             raise EmptyResumeTextError("Resume raw text must not be empty.")
+        # Resumes rarely exceed a few pages; capping the text bounds the cost of a
+        # single parse even for unusually long or padded PDFs.
+        normalized_text = normalized_text[: settings.resume_text_max_chars]
 
         try:
             result = await self.client.generate_structured(

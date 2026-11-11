@@ -68,12 +68,18 @@ class OpenAIStructuredOutputClient:
         input_text: str,
         response_model: type[StructuredModel],
     ) -> StructuredModel:
+        # Imported lazily so this module stays importable without Redis configured.
+        from app.services.usage_guard import reserve_ai_call
+
+        # Count the call before it is made so the daily budget can never be overshot.
+        await reserve_ai_call()
         try:
             response = await self.client.responses.parse(
                 model=self.model,
                 instructions=instructions,
                 input=input_text,
                 text_format=response_model,
+                max_output_tokens=settings.ai_max_output_tokens,
                 store=False,
             )
         except ValidationError:

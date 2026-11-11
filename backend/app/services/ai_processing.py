@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from app.db.models import AIEvaluation, Application, Job, Resume
 from app.enums import AIProcessingState
+from app.services.usage_guard import ensure_ai_budget_available
 from app.services.errors import (
     ProcessingPrerequisiteError,
     ProcessingQueueError,
@@ -43,6 +44,7 @@ class AIProcessingService:
                 state=AIProcessingState.PROCESSING,
                 message="Job criteria generation is already processing.",
             )
+        await ensure_ai_budget_available()
 
         job.criteria_processing_state = AIProcessingState.PROCESSING
         await job.save(update_fields=["criteria_processing_state", "updated_at"])
@@ -80,6 +82,7 @@ class AIProcessingService:
                 state=AIProcessingState.PROCESSING,
                 message="Resume processing is already in progress.",
             )
+        await ensure_ai_budget_available()
 
         resume.processing_state = AIProcessingState.PROCESSING
         await resume.save(update_fields=["processing_state", "updated_at"])
@@ -128,6 +131,7 @@ class AIProcessingService:
                 state=AIProcessingState.PROCESSING,
                 message="Candidate evaluation is already processing.",
             )
+        await ensure_ai_budget_available()
 
         application.evaluation_processing_state = AIProcessingState.PROCESSING
         await application.save(
@@ -189,6 +193,7 @@ class AIProcessingService:
         ]
         if not eligible_ids:
             return BatchProcessingRequest([], [], "No applicants are ready for screening.")
+        await ensure_ai_budget_available()
 
         await Application.filter(id__in=eligible_ids).update(
             evaluation_processing_state=AIProcessingState.PROCESSING

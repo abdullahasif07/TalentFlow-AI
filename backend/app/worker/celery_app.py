@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import settings
 
@@ -30,3 +31,13 @@ celery_app.conf.update(
     task_time_limit=600,
     result_expires=3600,
 )
+
+if settings.demo_mode:
+    # Restores the demo dataset nightly. Runs only when Celery beat is started
+    # (``celery ... worker -B`` locally, or a separate beat process).
+    celery_app.conf.beat_schedule = {
+        "reset-demo-data": {
+            "task": "talentflow.reset_demo_data",
+            "schedule": crontab(hour=settings.demo_reset_hour_utc, minute=0),
+        }
+    }
