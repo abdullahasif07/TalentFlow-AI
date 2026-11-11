@@ -41,14 +41,19 @@ class SubmitApplicationInput:
     linkedin_url: str | None = None
     github_url: str | None = None
     portfolio_url: str | None = None
+    # Honeypot: hidden from people in the UI, so only bots fill it in.
+    website: str | None = None
+
+
+@strawberry.input
+class PublicApplicationStatusInput:
+    token: str
 
 
 @strawberry.input
 class UpdateApplicationStatusInput:
     application_id: strawberry.ID
     status: ApplicationStatus
-    changed_by: str
-    recruiter_id: strawberry.ID | None = None
     automated: bool = False
 
 
@@ -56,8 +61,6 @@ class UpdateApplicationStatusInput:
 class BulkUpdateApplicationStatusInput:
     application_ids: list[strawberry.ID]
     status: ApplicationStatus
-    changed_by: str
-    recruiter_id: strawberry.ID | None = None
     automated: bool = False
 
 
@@ -65,4 +68,3 @@ class BulkUpdateApplicationStatusInput:
 class AddApplicationNoteInput:
     application_id: strawberry.ID
     content: str
-    recruiter_id: strawberry.ID | None = None

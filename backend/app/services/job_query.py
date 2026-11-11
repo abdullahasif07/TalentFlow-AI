@@ -51,3 +51,12 @@ class PublicJobQueryService:
         return await Job.filter(id=job_id, status=JobStatus.OPEN).select_related(
             "company"
         ).first()
+
+    @staticmethod
+    async def list_open_jobs(limit: int = 20) -> list[Job]:
+        return (
+            await Job.filter(status=JobStatus.OPEN)
+            .select_related("company")
+            .order_by("-created_at")
+            .limit(limit)
+        )

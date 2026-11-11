@@ -4,9 +4,12 @@ import logging
 
 import strawberry
 
+from app.graphql.context import RECRUITER_ONLY, application_visible_to, job_visible_to
+
 from app.graphql.inputs import (
     ApplicationQueryInput,
     ApplicationsQueryInput,
+    PublicApplicationStatusInput,
     RecommendedCandidatesInput,
 )
 from app.graphql.types import (
@@ -16,11 +19,17 @@ from app.graphql.types import (
     ApplicationsResult,
     OffsetPageInfo,
     OperationErrorCode,
+    PublicApplicationProgress,
+    PublicApplicationStatusResult,
     RecommendedCandidateType,
     RecommendedCandidatesResult,
     operation_error,
 )
 from app.services import RecruiterApplicationQueryService
+from app.services.application_progress import (
+    application_id_from_status_token,
+    get_application_progress,
+)
 from app.services.errors import InvalidApplicationInformationError, JobNotFoundError
 
 
@@ -30,8 +39,60 @@ logger = logging.getLogger(__name__)
 @strawberry.type
 class ApplicationQuery:
     @strawberry.field
+    async def public_application_status(
+        self, input: PublicApplicationStatusInput
+    ) -> PublicApplicationStatusResult:
+        """Coarse progress for an applicant, unlocked by their receipt's status token."""
+
+        application_id = application_id_from_status_token(input.token.strip())
+        if application_id is None:
+            return PublicApplicationStatusResult(
+                success=False,
+                progress=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.NOT_FOUND,
+                        "This application status link is invalid or has expired.",
+                        "token",
+                    )
+                ],
+            )
+        try:
+            progress = await get_application_progress(application_id)
+        except Exception:
+            logger.exception("Unable to load progress for application %s", application_id)
+            return PublicApplicationStatusResult(
+                success=False,
+                progress=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.INTERNAL_ERROR,
+                        "Unable to load the application status.",
+                    )
+                ],
+            )
+        if progress is None:
+            return PublicApplicationStatusResult(
+                success=False,
+                progress=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.NOT_FOUND,
+                        "This application status link is invalid or has expired.",
+                        "token",
+                    )
+                ],
+            )
+        return PublicApplicationStatusResult(
+            success=True,
+            progress=PublicApplicationProgress.from_progress(progress),
+            errors=[],
+        )
+
+    @strawberry.field(permission_classes=RECRUITER_ONLY)
     async def recommended_candidates(
         self,
+        info: strawberry.Info,
         input: RecommendedCandidatesInput,
     ) -> RecommendedCandidatesResult:
         try:
@@ -54,6 +115,8 @@ class ApplicationQuery:
             )
 
         try:
+            if not await job_visible_to(info, job_id):
+                raise JobNotFoundError("Job not found.")
             page = await RecruiterApplicationQueryService.list_recommended_for_job(
                 job_id=job_id,
                 limit=input.limit,
@@ -111,8 +174,10 @@ class ApplicationQuery:
             errors=[],
         )
 
-    @strawberry.field
-    async def applications(self, input: ApplicationsQueryInput) -> ApplicationsResult:
+    @strawberry.field(permission_classes=RECRUITER_ONLY)
+    async def applications(
+        self, info: strawberry.Info, input: ApplicationsQueryInput
+    ) -> ApplicationsResult:
         try:
             job_id = int(input.job_id)
         except (TypeError, ValueError):
@@ -133,6 +198,8 @@ class ApplicationQuery:
         pagination = input.pagination
         filters = input.filters
         try:
+            if not await job_visible_to(info, job_id):
+                raise JobNotFoundError("Job not found.")
             page = await RecruiterApplicationQueryService.list_for_job(
                 job_id=job_id,
                 status=filters.status if filters and filters.status else input.status,
@@ -201,8 +268,10 @@ class ApplicationQuery:
                 ],
             )
 
-    @strawberry.field
-    async def application(self, input: ApplicationQueryInput) -> ApplicationResult:
+    @strawberry.field(permission_classes=RECRUITER_ONLY)
+    async def application(
+        self, info: strawberry.Info, input: ApplicationQueryInput
+    ) -> ApplicationResult:
         try:
             application_id = int(input.id)
         except (TypeError, ValueError):
@@ -219,7 +288,11 @@ class ApplicationQuery:
             )
 
         try:
-            record = await RecruiterApplicationQueryService.get_detail(application_id)
+            record = (
+                await RecruiterApplicationQueryService.get_detail(application_id)
+                if await application_visible_to(info, application_id)
+                else None
+            )
         except Exception:
             logger.exception("Unable to query application %s", application_id)
             return ApplicationResult(

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 
 import strawberry
+
+from app.config import settings
+from app.db.models import AIEvaluation, Job
+from app.graphql.context import RECRUITER_ONLY, job_visible_to
+from app.schemas import CandidateComparison
+from app.services.usage_guard import cache_get, cache_set, ensure_ai_budget_available
 
 from app.graphql.inputs import CompareCandidatesInput
 from app.graphql.types import (
@@ -13,6 +20,7 @@ from app.graphql.types import (
 )
 from app.services import CandidateComparisonService
 from app.services.errors import (
+    AIUsageLimitError,
     CandidateComparisonDataAccessError,
     CandidateComparisonError,
     CandidateComparisonProviderError,
@@ -120,9 +128,10 @@ def _parse_input(input: CompareCandidatesInput) -> tuple[int, list[int]]:
 
 @strawberry.type
 class CandidateComparisonMutation:
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def compare_candidates(
         self,
+        info: strawberry.Info,
         input: CompareCandidatesInput,
     ) -> CandidateComparisonResult:
         try:
@@ -139,10 +148,35 @@ class CandidateComparisonMutation:
                 ]
             )
 
+        if not await job_visible_to(info, job_id):
+            return CandidateComparisonResult.failure(
+                [operation_error(OperationErrorCode.NOT_FOUND, "Job record not found.", "jobId")]
+            )
+
         try:
+            cache_key = await _comparison_cache_key(job_id, application_ids)
+            cached = await cache_get(cache_key) if cache_key else None
+            if cached:
+                try:
+                    return CandidateComparisonResult.success_result(
+                        CandidateComparison.model_validate_json(cached)
+                    )
+                except ValueError:
+                    logger.warning("Ignoring an unreadable cached comparison %s", cache_key)
+            await ensure_ai_budget_available()
             comparison = await CandidateComparisonService().compare(
                 job_id=job_id,
                 application_ids=application_ids,
+            )
+            if cache_key:
+                await cache_set(
+                    cache_key,
+                    comparison.model_dump_json(),
+                    ttl_seconds=settings.comparison_cache_seconds,
+                )
+        except AIUsageLimitError as exc:
+            return CandidateComparisonResult.failure(
+                [operation_error(OperationErrorCode.RATE_LIMITED, str(exc))]
             )
         except CandidateComparisonError as exc:
             return CandidateComparisonResult.failure([_comparison_error(exc)])
@@ -162,3 +196,23 @@ class CandidateComparisonMutation:
             )
 
         return CandidateComparisonResult.success_result(comparison)
+
+
+async def _comparison_cache_key(job_id: int, application_ids: list[int]) -> str | None:
+    """Key a comparison on its inputs so any re-evaluation or job edit misses the cache."""
+
+    job = await Job.get_or_none(id=job_id)
+    if job is None:
+        return None
+    evaluations = await AIEvaluation.filter(application_id__in=application_ids).only(
+        "application_id", "updated_at"
+    )
+    if len(evaluations) != len(application_ids):
+        return None
+    fingerprint = "|".join(
+        [job.updated_at.isoformat()]
+        + sorted(f"{item.application_id}:{item.updated_at.isoformat()}" for item in evaluations)
+    )
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+    ordered_ids = "-".join(str(application_id) for application_id in application_ids)
+    return f"comparison:{job_id}:{ordered_ids}:{digest}"

@@ -4,6 +4,8 @@ import logging
 
 import strawberry
 
+from app.graphql.context import RECRUITER_ONLY, require_recruiter
+
 from app.db.models import Job
 from app.graphql.inputs import JobQueryInput, JobsQueryInput, PublicJobQueryInput
 from app.graphql.types import (
@@ -12,6 +14,7 @@ from app.graphql.types import (
     JobType,
     OperationErrorCode,
     PublicJobResult,
+    PublicJobsResult,
     PublicJobType,
     operation_error,
 )
@@ -75,9 +78,36 @@ class JobQuery:
         )
 
     @strawberry.field
-    async def jobs(self, input: JobsQueryInput | None = None) -> JobsResult:
+    async def public_jobs(self) -> PublicJobsResult:
+        """Open roles for the public landing page; exposes only applicant-safe fields."""
+
         try:
-            query = Job.all()
+            records = await PublicJobQueryService.list_open_jobs()
+        except Exception:
+            logger.exception("Unable to query public jobs")
+            return PublicJobsResult(
+                success=False,
+                items=[],
+                errors=[
+                    operation_error(
+                        OperationErrorCode.INTERNAL_ERROR,
+                        "Unable to load open roles.",
+                    )
+                ],
+            )
+        return PublicJobsResult(
+            success=True,
+            items=[PublicJobType.from_model(record) for record in records],
+            errors=[],
+        )
+
+    @strawberry.field(permission_classes=RECRUITER_ONLY)
+    async def jobs(
+        self, info: strawberry.Info, input: JobsQueryInput | None = None
+    ) -> JobsResult:
+        recruiter = require_recruiter(info)
+        try:
+            query = Job.filter(company_id=recruiter.company_id)
             if input and input.company_id is not None:
                 try:
                     company_id = int(input.company_id)
@@ -116,8 +146,9 @@ class JobQuery:
                 ],
             )
 
-    @strawberry.field
-    async def job(self, input: JobQueryInput) -> JobResult:
+    @strawberry.field(permission_classes=RECRUITER_ONLY)
+    async def job(self, info: strawberry.Info, input: JobQueryInput) -> JobResult:
+        recruiter = require_recruiter(info)
         try:
             job_id = int(input.id)
         except (TypeError, ValueError):
@@ -134,7 +165,9 @@ class JobQuery:
             )
 
         try:
-            query = RecruiterJobQueryService.with_statistics(Job.filter(id=job_id))
+            query = RecruiterJobQueryService.with_statistics(
+                Job.filter(id=job_id, company_id=recruiter.company_id)
+            )
             record = await query.first()
         except Exception:
             logger.exception("Unable to query job %s", job_id)

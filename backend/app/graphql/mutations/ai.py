@@ -5,6 +5,8 @@ from collections.abc import Awaitable, Callable
 
 import strawberry
 
+from app.graphql.context import RECRUITER_ONLY, application_visible_to, job_visible_to
+
 from app.enums import AIProcessingState
 from app.graphql.inputs import (
     GenerateCandidateEvaluationInput,
@@ -23,6 +25,7 @@ from app.services import AIProcessingService
 from app.services.ai_processing import ProcessingRequest
 from app.services.errors import (
     AIProcessingRequestError,
+    AIUsageLimitError,
     ProcessingPrerequisiteError,
     ProcessingQueueError,
     ProcessingResourceNotFoundError,
@@ -43,6 +46,8 @@ def _processing_error(
     error: AIProcessingRequestError,
     field: str,
 ) -> OperationError:
+    if isinstance(error, AIUsageLimitError):
+        return operation_error(OperationErrorCode.RATE_LIMITED, str(error))
     if isinstance(error, ProcessingResourceNotFoundError):
         return operation_error(OperationErrorCode.NOT_FOUND, str(error), field)
     if isinstance(error, ProcessingPrerequisiteError):
@@ -57,6 +62,7 @@ async def _enqueue_resource(
     raw_id: strawberry.ID,
     field: str,
     enqueue: Callable[[int], Awaitable[ProcessingRequest]],
+    visible: Callable[[int], Awaitable[bool]],
 ) -> AIProcessingPayload:
     try:
         resource_id = _parse_id(raw_id)
@@ -78,6 +84,10 @@ async def _enqueue_resource(
         )
 
     try:
+        if not await visible(resource_id):
+            raise ProcessingResourceNotFoundError(
+                "Job not found." if field == "jobId" else "Application not found."
+            )
         request = await enqueue(resource_id)
     except AIProcessingRequestError as exc:
         return AIProcessingPayload(
@@ -123,42 +133,49 @@ async def _enqueue_resource(
 
 @strawberry.type
 class AIProcessingMutation:
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def generate_job_criteria(
         self,
+        info: strawberry.Info,
         input: GenerateJobCriteriaInput,
     ) -> AIProcessingPayload:
         return await _enqueue_resource(
             raw_id=input.job_id,
             field="jobId",
             enqueue=AIProcessingService.generate_job_criteria,
+            visible=lambda resource_id: job_visible_to(info, resource_id),
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def process_application_resume(
         self,
+        info: strawberry.Info,
         input: ProcessApplicationResumeInput,
     ) -> AIProcessingPayload:
         return await _enqueue_resource(
             raw_id=input.application_id,
             field="applicationId",
             enqueue=AIProcessingService.process_application_resume,
+            visible=lambda resource_id: application_visible_to(info, resource_id),
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def generate_candidate_evaluation(
         self,
+        info: strawberry.Info,
         input: GenerateCandidateEvaluationInput,
     ) -> AIProcessingPayload:
         return await _enqueue_resource(
             raw_id=input.application_id,
             field="applicationId",
             enqueue=AIProcessingService.generate_candidate_evaluation,
+            visible=lambda resource_id: application_visible_to(info, resource_id),
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def screen_job_applicants(
         self,
+        info: strawberry.Info,
         input: ScreenJobApplicantsInput,
     ) -> BatchScreeningPayload:
         try:
@@ -183,6 +200,8 @@ class AIProcessingMutation:
             )
 
         try:
+            if not await job_visible_to(info, job_id):
+                raise ProcessingResourceNotFoundError("Job not found.")
             request = await AIProcessingService.screen_job_applicants(job_id)
         except AIProcessingRequestError as exc:
             return BatchScreeningPayload(

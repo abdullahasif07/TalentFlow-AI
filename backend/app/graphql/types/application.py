@@ -5,6 +5,12 @@ from decimal import Decimal
 from enum import Enum
 
 import strawberry
+
+from app.services.application_progress import (
+    ApplicationProgress,
+    ApplicationProgressStage,
+    create_status_token,
+)
 from strawberry.scalars import JSON
 
 from app.db.models import (
@@ -569,6 +575,9 @@ class PublicApplicationReceipt:
     submitted_at: datetime
     processing_state: AIProcessingState
     processing_message: str
+    status_token: str = strawberry.field(
+        description="Signed token for polling publicApplicationStatus."
+    )
 
     @classmethod
     def from_model(
@@ -586,7 +595,39 @@ class PublicApplicationReceipt:
             submitted_at=application.applied_at,
             processing_state=processing_state,
             processing_message=processing_message,
+            status_token=create_status_token(application.id),
         )
+
+
+ApplicationProgressStageType = strawberry.enum(
+    ApplicationProgressStage, name="ApplicationProgressStage"
+)
+
+
+@strawberry.type
+class PublicApplicationProgress:
+    stage: ApplicationProgressStageType
+    message: str
+    job_title: str
+    candidate_name: str
+    finished: bool
+
+    @classmethod
+    def from_progress(cls, progress: ApplicationProgress) -> "PublicApplicationProgress":
+        return cls(
+            stage=progress.stage,
+            message=progress.message,
+            job_title=progress.job_title,
+            candidate_name=progress.candidate_name,
+            finished=progress.finished,
+        )
+
+
+@strawberry.type
+class PublicApplicationStatusResult:
+    success: bool
+    progress: PublicApplicationProgress | None
+    errors: list[OperationError]
 
 
 @strawberry.type

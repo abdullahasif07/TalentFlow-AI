@@ -133,6 +133,13 @@ class PublicJobResult:
 
 
 @strawberry.type
+class PublicJobsResult:
+    success: bool
+    items: list[PublicJobType]
+    errors: list[OperationError]
+
+
+@strawberry.type
 class CreateJobPayload:
     success: bool
     job: JobType | None

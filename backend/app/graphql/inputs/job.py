@@ -24,11 +24,13 @@ class PublicJobQueryInput:
 
 @strawberry.input
 class CreateJobInput:
-    company_id: strawberry.ID
     title: str
     description: str
     required_skills: JSON
     preferred_skills: JSON
+    # Ignored unless it matches the signed-in recruiter's company; kept for clients
+    # that still send it.
+    company_id: strawberry.ID | None = None
     experience_requirement: str | None = None
     evaluation_criteria: JSON | None = None
     status: JobStatus = JobStatus.DRAFT

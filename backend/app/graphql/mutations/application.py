@@ -4,6 +4,9 @@ import logging
 
 import strawberry
 
+from app.config import settings
+from app.graphql.context import RECRUITER_ONLY, request_client_ip, require_recruiter
+
 from app.enums import AIProcessingState
 from app.graphql.inputs import (
     AddApplicationNoteInput,
@@ -24,6 +27,7 @@ from app.graphql.types import (
     UpdateApplicationStatusPayload,
     operation_error,
 )
+from app.services.usage_guard import hit_rate_limit
 from app.services import (
     ApplicationNoteService,
     ApplicationPipelineService,
@@ -32,6 +36,7 @@ from app.services import (
 )
 from app.services.errors import (
     AIProcessingRequestError,
+    AIUsageLimitError,
     ApplicationNotFoundError,
     ApplicationNoteError,
     ApplicationPipelineError,
@@ -82,7 +87,7 @@ def pipeline_error(error: ApplicationPipelineError) -> OperationError:
         return operation_error(OperationErrorCode.NOT_FOUND, str(error), field)
     if isinstance(error, RecruiterCompanyMismatchError):
         return operation_error(
-            OperationErrorCode.VALIDATION_ERROR, str(error), "recruiterId"
+            OperationErrorCode.NOT_FOUND, "Application not found.", "applicationId"
         )
     if isinstance(error, InvalidPipelineActorError):
         return operation_error(OperationErrorCode.VALIDATION_ERROR, str(error), "changedBy")
@@ -96,28 +101,51 @@ def note_error(error: ApplicationNoteError | ApplicationPipelineError) -> Operat
         return operation_error(OperationErrorCode.NOT_FOUND, str(error), "recruiterId")
     if isinstance(error, RecruiterCompanyMismatchError):
         return operation_error(
-            OperationErrorCode.VALIDATION_ERROR, str(error), "recruiterId"
+            OperationErrorCode.NOT_FOUND, "Application not found.", "applicationId"
         )
     if isinstance(error, InvalidApplicationNoteError):
         return operation_error(OperationErrorCode.VALIDATION_ERROR, str(error), "content")
     return operation_error(OperationErrorCode.VALIDATION_ERROR, str(error), "recruiterId")
 
 
-def parse_optional_id(value: strawberry.ID | None) -> int | None:
-    if value is None:
-        return None
-    parsed = int(value)
-    if parsed < 1:
-        raise ValueError
-    return parsed
-
-
 @strawberry.type
 class ApplicationMutation:
     @strawberry.mutation
     async def submit_application(
-        self, input: SubmitApplicationInput
+        self, info: strawberry.Info, input: SubmitApplicationInput
     ) -> SubmitApplicationPayload:
+        if input.website and input.website.strip():
+            # Only automated form fillers see the hidden honeypot field.
+            logger.info("Rejected an application that filled the honeypot field.")
+            return SubmitApplicationPayload(
+                success=False,
+                application=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.VALIDATION_ERROR,
+                        "Unable to submit the application. Please try again.",
+                        "input",
+                    )
+                ],
+            )
+        allowed = await hit_rate_limit(
+            "apply",
+            request_client_ip(info),
+            limit=settings.application_rate_limit_per_hour,
+            window_seconds=60 * 60,
+        )
+        if not allowed:
+            return SubmitApplicationPayload(
+                success=False,
+                application=None,
+                errors=[
+                    operation_error(
+                        OperationErrorCode.RATE_LIMITED,
+                        "Too many applications were submitted from your network. "
+                        "Please try again in an hour.",
+                    )
+                ],
+            )
         try:
             application = await ApplicationService().submit(
                 job_id=str(input.job_id),
@@ -157,6 +185,15 @@ class ApplicationMutation:
             )
             processing_state = processing.state
             processing_message = processing.message
+        except AIUsageLimitError as exc:
+            logger.warning(
+                "Application %s was created; AI screening is paused: %s", application.id, exc
+            )
+            processing_state = AIProcessingState.NOT_STARTED
+            processing_message = (
+                "Application received. Automated screening is paused for today, so a "
+                "recruiter will review it directly."
+            )
         except AIProcessingRequestError as exc:
             logger.warning(
                 "Application %s was created but resume processing was not queued: %s",
@@ -189,11 +226,13 @@ class ApplicationMutation:
             errors=[],
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def update_application_status(
         self,
+        info: strawberry.Info,
         input: UpdateApplicationStatusInput,
     ) -> UpdateApplicationStatusPayload:
+        recruiter = require_recruiter(info)
         try:
             application_id = int(input.application_id)
         except (TypeError, ValueError):
@@ -210,26 +249,11 @@ class ApplicationMutation:
             )
 
         try:
-            recruiter_id = parse_optional_id(input.recruiter_id)
-        except (TypeError, ValueError):
-            return UpdateApplicationStatusPayload(
-                success=False,
-                application=None,
-                errors=[
-                    operation_error(
-                        OperationErrorCode.VALIDATION_ERROR,
-                        "Invalid recruiter ID.",
-                        "recruiterId",
-                    )
-                ],
-            )
-
-        try:
             application = await ApplicationPipelineService.update_status(
                 application_id=application_id,
                 new_status=input.status,
-                changed_by=input.changed_by,
-                recruiter_id=recruiter_id,
+                changed_by=recruiter.email,
+                recruiter_id=recruiter.id,
                 automated=input.automated,
             )
         except ApplicationPipelineError as exc:
@@ -257,11 +281,13 @@ class ApplicationMutation:
             errors=[],
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def bulk_update_application_status(
         self,
+        info: strawberry.Info,
         input: BulkUpdateApplicationStatusInput,
     ) -> BulkUpdateApplicationStatusPayload:
+        recruiter = require_recruiter(info)
         if not input.application_ids or len(input.application_ids) > MAX_BULK_APPLICATIONS:
             return BulkUpdateApplicationStatusPayload(
                 success=False,
@@ -275,22 +301,6 @@ class ApplicationMutation:
                     )
                 ],
             )
-        try:
-            recruiter_id = parse_optional_id(input.recruiter_id)
-        except (TypeError, ValueError):
-            return BulkUpdateApplicationStatusPayload(
-                success=False,
-                applications=[],
-                failures=[],
-                errors=[
-                    operation_error(
-                        OperationErrorCode.VALIDATION_ERROR,
-                        "Invalid recruiter ID.",
-                        "recruiterId",
-                    )
-                ],
-            )
-
         applications: list[ApplicationType] = []
         failures: list[ApplicationStatusUpdateFailure] = []
         seen_ids: set[str] = set()
@@ -306,8 +316,8 @@ class ApplicationMutation:
                 application = await ApplicationPipelineService.update_status(
                     application_id=application_id,
                     new_status=input.status,
-                    changed_by=input.changed_by,
-                    recruiter_id=recruiter_id,
+                    changed_by=recruiter.email,
+                    recruiter_id=recruiter.id,
                     automated=input.automated,
                 )
                 applications.append(ApplicationType.from_model(application))
@@ -352,11 +362,13 @@ class ApplicationMutation:
             errors=[],
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def add_application_note(
         self,
+        info: strawberry.Info,
         input: AddApplicationNoteInput,
     ) -> AddApplicationNotePayload:
+        recruiter = require_recruiter(info)
         try:
             application_id = int(input.application_id)
             if application_id < 1:
@@ -374,25 +386,10 @@ class ApplicationMutation:
                 ],
             )
         try:
-            recruiter_id = parse_optional_id(input.recruiter_id)
-        except (TypeError, ValueError):
-            return AddApplicationNotePayload(
-                success=False,
-                note=None,
-                errors=[
-                    operation_error(
-                        OperationErrorCode.VALIDATION_ERROR,
-                        "Invalid recruiter ID.",
-                        "recruiterId",
-                    )
-                ],
-            )
-
-        try:
             note = await ApplicationNoteService.add_note(
                 application_id=application_id,
                 content=input.content,
-                recruiter_id=recruiter_id,
+                recruiter_id=recruiter.id,
             )
         except (ApplicationNoteError, ApplicationPipelineError) as exc:
             return AddApplicationNotePayload(

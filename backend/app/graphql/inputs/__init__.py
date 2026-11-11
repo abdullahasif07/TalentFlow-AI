@@ -4,6 +4,7 @@ from app.graphql.inputs.application import (
     ApplicationQueryInput,
     ApplicationsQueryInput,
     BulkUpdateApplicationStatusInput,
+    PublicApplicationStatusInput,
     SubmitApplicationInput,
     UpdateApplicationStatusInput,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "RecommendedCandidatesInput",
     "ScreenJobApplicantsInput",
     "SendOutreachInput",
+    "PublicApplicationStatusInput",
     "SubmitApplicationInput",
     "UpdateApplicationStatusInput",
     "UpdateOutreachDraftInput",

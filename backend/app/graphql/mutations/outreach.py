@@ -5,6 +5,9 @@ from collections.abc import Awaitable, Callable
 
 import strawberry
 
+from app.graphql.context import RECRUITER_ONLY, application_visible_to, outreach_visible_to
+from app.services.usage_guard import ensure_ai_budget_available
+
 from app.db.models import OutreachEmail
 from app.graphql.inputs import (
     ApproveOutreachInput,
@@ -21,6 +24,7 @@ from app.graphql.types import (
 )
 from app.services import OutreachGenerationService, OutreachWorkflowService
 from app.services.errors import (
+    AIUsageLimitError,
     InvalidOutreachBodyError,
     InvalidOutreachContextError,
     InvalidOutreachInstructionError,
@@ -115,6 +119,7 @@ def _workflow_error(error: OutreachWorkflowError) -> OperationError:
 
 async def _run_workflow_action(
     *,
+    info: strawberry.Info,
     raw_id: strawberry.ID,
     action: Callable[[int], Awaitable[OutreachEmail]],
     log_action: str,
@@ -135,6 +140,8 @@ async def _run_workflow_action(
         )
 
     try:
+        if not await outreach_visible_to(info, outreach_id):
+            raise OutreachNotFoundError("Outreach email not found.")
         outreach = await action(outreach_id)
     except OutreachWorkflowError as exc:
         return OutreachMutationPayload(
@@ -164,9 +171,10 @@ async def _run_workflow_action(
 
 @strawberry.type
 class OutreachMutation:
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def generate_outreach(
         self,
+        info: strawberry.Info,
         input: GenerateOutreachInput,
     ) -> OutreachMutationPayload:
         try:
@@ -185,9 +193,18 @@ class OutreachMutation:
             )
 
         try:
+            if not await application_visible_to(info, application_id):
+                raise OutreachApplicationNotFoundError("Application record not found.")
+            await ensure_ai_budget_available()
             outreach = await OutreachGenerationService().generate_and_save(
                 application_id,
                 instruction=input.instruction,
+            )
+        except AIUsageLimitError as exc:
+            return OutreachMutationPayload(
+                success=False,
+                outreach=None,
+                errors=[operation_error(OperationErrorCode.RATE_LIMITED, str(exc))],
             )
         except OutreachGenerationError as exc:
             return OutreachMutationPayload(
@@ -214,9 +231,10 @@ class OutreachMutation:
             errors=[],
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def update_outreach_draft(
         self,
+        info: strawberry.Info,
         input: UpdateOutreachDraftInput,
     ) -> OutreachMutationPayload:
         async def update(outreach_id: int) -> OutreachEmail:
@@ -227,28 +245,33 @@ class OutreachMutation:
             )
 
         return await _run_workflow_action(
+            info=info,
             raw_id=input.outreach_id,
             action=update,
             log_action="update",
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def approve_outreach(
         self,
+        info: strawberry.Info,
         input: ApproveOutreachInput,
     ) -> OutreachMutationPayload:
         return await _run_workflow_action(
+            info=info,
             raw_id=input.outreach_id,
             action=OutreachWorkflowService.approve,
             log_action="approve",
         )
 
-    @strawberry.mutation
+    @strawberry.mutation(permission_classes=RECRUITER_ONLY)
     async def send_outreach(
         self,
+        info: strawberry.Info,
         input: SendOutreachInput,
     ) -> OutreachMutationPayload:
         return await _run_workflow_action(
+            info=info,
             raw_id=input.outreach_id,
             action=OutreachWorkflowService().send,
             log_action="send",
