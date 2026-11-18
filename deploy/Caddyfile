@@ -8,3 +8,5 @@
 	}
 	reverse_proxy api:8000
 }
+
+import /etc/caddy/sites/*.caddy
