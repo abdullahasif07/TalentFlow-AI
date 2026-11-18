@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from typing import Any
 
 from fastapi import Request, Response
@@ -25,8 +26,35 @@ class GraphQLContext(BaseContext):
         self.client_ip = client_ip
 
 
+PROXY_SECRET_HEADER = "x-tf-proxy-secret"
+PROXY_CLIENT_IP_HEADER = "x-tf-client-ip"
+
+
+def has_valid_proxy_secret(request: Request) -> bool:
+    """True when a proxy secret is configured and the request carries it."""
+
+    from app.config import settings
+
+    expected = settings.proxy_shared_secret
+    if expected is None or not expected.get_secret_value():
+        return False
+    supplied = request.headers.get(PROXY_SECRET_HEADER, "")
+    return hmac.compare_digest(
+        supplied.encode("utf-8"), expected.get_secret_value().encode("utf-8")
+    )
+
+
 def client_ip_from_request(request: Request | None) -> str:
-    if request is None or request.client is None:
+    if request is None:
+        return "unknown"
+    # Behind the frontend proxy every request comes from the proxy's own address, so
+    # use the visitor address it forwards, but only when the shared secret proves the
+    # header was set by the proxy and not by the caller.
+    if has_valid_proxy_secret(request):
+        forwarded = request.headers.get(PROXY_CLIENT_IP_HEADER, "").strip()
+        if forwarded:
+            return forwarded[:64]
+    if request.client is None:
         return "unknown"
     return request.client.host or "unknown"
 

@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     resume_text_max_chars: int = 20_000
     ai_max_output_tokens: int = 6_000
 
+    # Shared secret sent by the frontend's Next.js proxy (frontend/proxy.ts). When set,
+    # the API refuses requests that do not carry it, so it is reachable only through the
+    # frontend, and it trusts the client IP that the proxy forwards for rate limits.
+    proxy_shared_secret: SecretStr | None = None
+
     # The GraphQL IDE defaults to on in development and off in production.
     graphql_ide_enabled: bool | None = None
 

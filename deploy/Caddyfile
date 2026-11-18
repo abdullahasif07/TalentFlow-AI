@@ -1,0 +1,10 @@
+# Serves the API over HTTPS and gets a certificate automatically.
+# API_HOST is e.g. 203-0-113-10.sslip.io (your server IP with dashes), which resolves
+# to that IP without buying a domain.
+{$API_HOST} {
+	encode gzip
+	request_body {
+		max_size 6MB
+	}
+	reverse_proxy api:8000
+}

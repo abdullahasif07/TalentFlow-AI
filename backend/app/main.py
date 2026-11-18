@@ -4,14 +4,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from strawberry.fastapi import GraphQLRouter
 
 from app.api import auth_router, resumes_router
 from app.config import settings
 from app.db import close_db, init_db
-from app.graphql.context import get_graphql_context
+from app.graphql.context import get_graphql_context, has_valid_proxy_secret
 from app.graphql.schema import schema
 
 
@@ -44,6 +45,23 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def require_frontend_proxy(request: Request, call_next):
+    """With PROXY_SHARED_SECRET set, only the frontend proxy may call the API."""
+
+    secret = settings.proxy_shared_secret
+    if (
+        secret is not None
+        and secret.get_secret_value()
+        and request.url.path != "/health"
+        and not has_valid_proxy_secret(request)
+    ):
+        return JSONResponse({"detail": "Not found."}, status_code=404)
+    return await call_next(request)
+
+
 app.include_router(
     GraphQLRouter(
         schema,
