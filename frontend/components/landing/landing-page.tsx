@@ -22,7 +22,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthRequestError, signInAsDemo } from "@/lib/auth";
 import { stringList } from "@/lib/graphql/jobs";
-import { GET_PUBLIC_JOBS, type PublicJobsQueryData } from "@/lib/graphql/public-jobs";
+import {
+  GET_PUBLIC_JOBS,
+  type PublicJobSummary,
+  type PublicJobsQueryData,
+} from "@/lib/graphql/public-jobs";
 import { cn } from "@/lib/utils";
 
 const FEATURES = [
@@ -54,11 +58,49 @@ export function LandingPage() {
   const demoMode = useDemoMode();
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
-  const { data, loading } = useQuery<PublicJobsQueryData>(GET_PUBLIC_JOBS, {
+  const { data, loading, refetch } = useQuery<PublicJobsQueryData>(GET_PUBLIC_JOBS, {
     fetchPolicy: "cache-and-network",
   });
   const jobs = data?.publicJobs.items ?? [];
   const signedIn = status === "authenticated";
+  // In demo mode every visitor works in a private copy of the demo company, so a
+  // visitor without one gets it before applying; otherwise their application would
+  // land in a workspace they can't see.
+  const needsSandbox = demoMode && !signedIn;
+
+  /** Opens the visitor's private demo workspace; returns that workspace's open roles. */
+  async function startSandbox(): Promise<PublicJobSummary[] | null> {
+    setDemoLoading(true);
+    setDemoError(null);
+    try {
+      setRecruiter(await signInAsDemo());
+      const result = await refetch();
+      return result.data?.publicJobs.items ?? [];
+    } catch (error) {
+      setDemoError(
+        error instanceof AuthRequestError ? error.message : "The demo is unavailable right now.",
+      );
+      return null;
+    } finally {
+      setDemoLoading(false);
+    }
+  }
+
+  async function applyAsCandidate() {
+    if (needsSandbox && !(await startSandbox())) return;
+    document.getElementById("open-roles")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function applyToRole(event: React.MouseEvent, job: PublicJobSummary) {
+    if (!needsSandbox) return;
+    event.preventDefault();
+    const sandboxJobs = await startSandbox();
+    if (!sandboxJobs) return;
+    // The sandbox is a copy of the same roles, so the matching one has the same title.
+    const match = sandboxJobs.find((item) => item.title === job.title);
+    if (match) router.push(`/jobs/${match.id}/apply`);
+    else document.getElementById("open-roles")?.scrollIntoView({ behavior: "smooth" });
+  }
 
   async function tryAsRecruiter() {
     if (signedIn) {
@@ -136,13 +178,15 @@ export function LandingPage() {
                 <span className="mt-1 block text-sm leading-6 text-muted-foreground">
                   {signedIn || !demoMode
                     ? "Review applicants, scores, and the hiring pipeline."
-                    : "One click, no sign-up. Explore a workspace full of sample applicants."}
+                    : "One click, no sign-up. Get a private workspace full of sample applicants."}
                 </span>
               </span>
             </button>
-            <a
-              href="#open-roles"
-              className="group flex items-start gap-4 rounded-2xl border bg-card p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md"
+            <button
+              type="button"
+              onClick={() => void applyAsCandidate()}
+              disabled={demoLoading}
+              className="group flex items-start gap-4 rounded-2xl border bg-card p-5 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md disabled:opacity-70"
             >
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef7f4] text-primary">
                 <UserRound className="size-5" aria-hidden="true" />
@@ -156,7 +200,7 @@ export function LandingPage() {
                   Submit a sample resume and watch it get parsed and scored live.
                 </span>
               </span>
-            </a>
+            </button>
           </div>
           {demoError ? (
             <p role="alert" className="mt-4 text-sm text-rose-700">
@@ -201,6 +245,8 @@ export function LandingPage() {
               <Link
                 key={job.id}
                 href={`/jobs/${job.id}/apply`}
+                onClick={(event) => void applyToRole(event, job)}
+                aria-disabled={demoLoading}
                 className="group flex flex-col rounded-2xl border bg-card p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md"
               >
                 <span className="text-xs font-semibold text-primary">{job.company.name}</span>

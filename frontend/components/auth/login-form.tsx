@@ -65,7 +65,7 @@ export function LoginForm() {
                 <FlaskConical className="size-4" aria-hidden="true" /> Just exploring?
               </p>
               <p className="mt-1 text-xs leading-5 text-amber-900">
-                Use the demo recruiter account - fictional data, no sign-up needed.
+                Get a private demo workspace - fictional data, no sign-up needed.
               </p>
               <Button
                 className="mt-3 w-full"

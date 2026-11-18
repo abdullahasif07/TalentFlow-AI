@@ -171,8 +171,8 @@ export function ApplicationForm({ jobId, demoMode }: { jobId: string; demoMode: 
           <div>
             <p className="font-semibold">This is a demo - please use sample details.</p>
             <p className="mt-1 text-xs leading-5">
-              Don’t submit your real resume. Applications are visible to anyone using the demo
-              recruiter account and are deleted nightly.
+              Don’t submit your real resume. Applications appear only in the demo workspace
+              this role belongs to and are deleted within 24 hours.
             </p>
             <a
               href="/sample-resume.pdf"
