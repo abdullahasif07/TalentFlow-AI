@@ -213,19 +213,15 @@ class AuthenticatedAppTests(unittest.IsolatedAsyncioTestCase):
             response = await self.login()
         self.assertEqual(response.status_code, 429)
 
-    async def test_demo_login_requires_a_seeded_demo_account(self) -> None:
-        self.assertEqual((await self.client.post("/auth/demo")).status_code, 404)
-        await Recruiter.create(
-            company=self.company,
-            name="Demo Recruiter",
-            email=settings.demo_recruiter_email,
-            role="Recruiter",
-            is_demo=True,
-            password_hash=hash_password("demo"),
-        )
+    async def test_demo_login_opens_a_private_sandbox(self) -> None:
         response = await self.client.post("/auth/demo")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(response.json()["is_demo"])
+        self.assertNotEqual(response.json()["company_id"], str(self.company.id))
+
+        with patch.object(settings, "demo_mode", False):
+            self.client.cookies.clear()
+            self.assertEqual((await self.client.post("/auth/demo")).status_code, 404)
 
     async def test_graphql_requires_session_for_recruiter_data(self) -> None:
         query = {"query": "{ jobs { success totalCount } }"}
