@@ -13,9 +13,12 @@ if TYPE_CHECKING:
 
 class Company(TimestampedModel):
     id = fields.IntField(primary_key=True)
-    name = fields.CharField(max_length=255, unique=True)
+    # Not unique: every demo sandbox is a private copy of the same demo company.
+    name = fields.CharField(max_length=255)
     description = fields.TextField(null=True)
     website = fields.CharField(max_length=500, null=True)
+    # A per-visitor demo workspace, deleted automatically after DEMO_SANDBOX_TTL_HOURS.
+    is_sandbox = fields.BooleanField(default=False)
 
     recruiters: "ReverseRelation[Recruiter]"
     jobs: "ReverseRelation[Job]"
