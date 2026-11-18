@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
+from tortoise.expressions import Subquery
 from tortoise.transactions import in_transaction
 
 from app.config import settings
@@ -67,8 +69,11 @@ class SeedSummary:
 
 
 async def ensure_company() -> Company:
+    """Return the shared demo company (never a per-visitor sandbox copy)."""
+
     company, _ = await Company.get_or_create(
         name=COMPANY["name"],
+        is_sandbox=False,
         defaults={"description": COMPANY["description"], "website": COMPANY["website"]},
     )
     return company
@@ -175,11 +180,20 @@ def build_parsed_resume(candidate: DemoCandidate) -> ParsedResume:
     )
 
 
-def resume_lines(candidate: DemoCandidate) -> list[str]:
+def candidate_email(candidate: DemoCandidate, email_tag: str | None = None) -> str:
+    """The candidate's email, plus-tagged per sandbox because candidate emails are unique."""
+
+    if not email_tag:
+        return candidate.email
+    local, _, domain = candidate.email.partition("@")
+    return f"{local}+{email_tag}@{domain}"
+
+
+def resume_lines(candidate: DemoCandidate, email: str | None = None) -> list[str]:
     institution, degree, field_of_study = candidate.education
     lines = [
         f"# {candidate.name}",
-        f"{candidate.email} | {candidate.phone} | linkedin.com/in/{candidate.handle}",
+        f"{email or candidate.email} | {candidate.phone} | linkedin.com/in/{candidate.handle}",
         "",
         "# Summary",
         f"{candidate.headline} {candidate.years:g} years of professional experience.",
@@ -280,8 +294,11 @@ def build_evaluation(candidate: DemoCandidate, job: DemoJob) -> CandidateEvaluat
 # --- Population -----------------------------------------------------------------------------
 
 
-async def populate_demo_data(company: Company) -> SeedSummary:
-    """Insert the demo jobs and applicants once; later runs leave existing data alone."""
+async def populate_demo_data(company: Company, *, email_tag: str | None = None) -> SeedSummary:
+    """Insert the demo jobs and applicants once; later runs leave existing data alone.
+
+    ``email_tag`` makes the applicants' emails unique for a sandbox copy.
+    """
 
     if await Job.exists(company=company):
         return SeedSummary(created=False)
@@ -311,16 +328,17 @@ async def populate_demo_data(company: Company) -> SeedSummary:
             demo_job = next(job for job in JOBS if job.key == demo_candidate.job_key)
             job = jobs_by_key[demo_job.key]
             is_designer = demo_candidate.job_key == "design"
+            email = candidate_email(demo_candidate, email_tag)
             candidate = await Candidate.create(
                 name=demo_candidate.name,
-                email=demo_candidate.email,
+                email=email,
                 phone=demo_candidate.phone,
                 linkedin_url=f"https://linkedin.com/in/{demo_candidate.handle}",
                 github_url=None if is_designer else f"https://github.com/{demo_candidate.handle}",
                 portfolio_url=f"https://{demo_candidate.handle}.example.com" if is_designer else None,
             )
 
-            lines = resume_lines(demo_candidate)
+            lines = resume_lines(demo_candidate, email)
             stored_path = await storage.store(
                 candidate.id,
                 ValidatedResumeFile(
@@ -377,7 +395,11 @@ async def populate_demo_data(company: Company) -> SeedSummary:
                 )
 
             await _create_history(
-                application, demo_candidate, applied_at, author_email=author.email if author else None
+                application,
+                demo_candidate,
+                applied_at,
+                candidate_email=email,
+                author_email=author.email if author else None,
             )
             for offset, content in enumerate(demo_candidate.notes):
                 await ApplicationNote.create(
@@ -409,13 +431,14 @@ async def _create_history(
     demo_candidate: DemoCandidate,
     applied_at: datetime,
     *,
+    candidate_email: str,
     author_email: str | None,
 ) -> None:
     await ApplicationStatusHistory.create(
         application=application,
         previous_status=None,
         new_status=ApplicationStatus.APPLIED,
-        changed_by=demo_candidate.email,
+        changed_by=candidate_email,
         created_at=applied_at,
     )
     previous = ApplicationStatus.APPLIED
@@ -435,14 +458,49 @@ async def _create_history(
         previous = status
 
 
+# --- Cleanup -------------------------------------------------------------------------------
+
+
+async def delete_orphan_candidates() -> int:
+    """Delete candidates with no remaining applications, and their resume files.
+
+    Candidates are shared across companies (one per email), so they are removed only
+    once every job they applied to is gone.
+    """
+
+    orphan_ids = await Candidate.exclude(
+        id__in=Subquery(Application.all().values("candidate_id"))
+    ).values_list("id", flat=True)
+    if not orphan_ids:
+        return 0
+    await Candidate.filter(id__in=orphan_ids).delete()  # Cascades to resumes.
+
+    resumes_dir = ResumeStorageService().upload_root / "resumes"
+    for candidate_id in orphan_ids:
+        await asyncio.to_thread(
+            shutil.rmtree, resumes_dir / str(candidate_id), ignore_errors=True
+        )
+    return len(orphan_ids)
+
+
+async def delete_companies(company_ids: list[int]) -> None:
+    """Delete companies with everything they own, then the applicants left behind."""
+
+    if not company_ids:
+        return
+    async with in_transaction():
+        # Cascades to recruiters, jobs, applications, evaluations, notes and history.
+        await Company.filter(id__in=company_ids).delete()
+    await delete_orphan_candidates()
+
+
 # --- Reset ----------------------------------------------------------------------------------
 
 
 async def reset_demo_data() -> SeedSummary:
-    """Delete every applicant and the demo company's jobs, then seed fresh demo data.
+    """Replace the shared demo company's jobs and applicants with a fresh copy.
 
-    Candidates are not company-scoped, so this clears all applicants. It is meant for
-    the dedicated demo database only, which is why it requires DEMO_MODE.
+    Per-visitor sandboxes are left alone; they expire on their own schedule.
     """
 
     if not settings.demo_mode:
@@ -450,12 +508,8 @@ async def reset_demo_data() -> SeedSummary:
 
     company = await ensure_company()
     async with in_transaction():
-        await Candidate.all().delete()  # Cascades to applications, resumes, notes, history.
-        await Job.filter(company=company).delete()
-
-    resumes_dir = ResumeStorageService().upload_root / "resumes"
-    if resumes_dir.exists():
-        shutil.rmtree(resumes_dir)
+        await Job.filter(company=company).delete()  # Cascades to applications.
+    await delete_orphan_candidates()
 
     await ensure_accounts(company)
     summary = await populate_demo_data(company)
