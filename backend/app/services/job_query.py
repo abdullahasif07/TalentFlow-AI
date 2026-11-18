@@ -53,10 +53,16 @@ class PublicJobQueryService:
         ).first()
 
     @staticmethod
-    async def list_open_jobs(limit: int = 20) -> list[Job]:
-        return (
-            await Job.filter(status=JobStatus.OPEN)
-            .select_related("company")
-            .order_by("-created_at")
-            .limit(limit)
-        )
+    async def list_open_jobs(limit: int = 20, *, sandbox_company_id: int | None = None) -> list[Job]:
+        """Open roles of real companies, or of one demo sandbox when its visitor asks.
+
+        Sandbox roles are hidden from everyone else so the landing page never lists
+        other visitors' copies or the jobs they created.
+        """
+
+        query = Job.filter(status=JobStatus.OPEN)
+        if sandbox_company_id is not None:
+            query = query.filter(company_id=sandbox_company_id)
+        else:
+            query = query.filter(company__is_sandbox=False)
+        return await query.select_related("company").order_by("-created_at").limit(limit)

@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 
 import strawberry
+from strawberry.types import Info
 
-from app.graphql.context import RECRUITER_ONLY, require_recruiter
+from app.demo.sandbox import is_sandbox_recruiter
+from app.graphql.context import RECRUITER_ONLY, current_recruiter, require_recruiter
 
 from app.db.models import Job
 from app.graphql.inputs import JobQueryInput, JobsQueryInput, PublicJobQueryInput
@@ -78,11 +80,21 @@ class JobQuery:
         )
 
     @strawberry.field
-    async def public_jobs(self) -> PublicJobsResult:
-        """Open roles for the public landing page; exposes only applicant-safe fields."""
+    async def public_jobs(self, info: Info) -> PublicJobsResult:
+        """Open roles for the public landing page; exposes only applicant-safe fields.
+
+        A visitor signed in to a demo sandbox sees that sandbox's roles, so they can
+        apply and then find their application in their own workspace.
+        """
 
         try:
-            records = await PublicJobQueryService.list_open_jobs()
+            recruiter = current_recruiter(info)
+            sandbox_company_id = (
+                recruiter.company_id if await is_sandbox_recruiter(recruiter) else None
+            )
+            records = await PublicJobQueryService.list_open_jobs(
+                sandbox_company_id=sandbox_company_id
+            )
         except Exception:
             logger.exception("Unable to query public jobs")
             return PublicJobsResult(

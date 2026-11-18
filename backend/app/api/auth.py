@@ -1,20 +1,23 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db.models import Recruiter
+from app.demo.sandbox import create_demo_sandbox, is_sandbox_recruiter
 from app.graphql.context import client_ip_from_request
 from app.services.auth import (
     authenticate,
     create_session_token,
-    demo_recruiter,
     recruiter_from_session,
 )
 from app.services.usage_guard import hit_rate_limit
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -50,11 +53,13 @@ def _session_payload(recruiter: Recruiter) -> RecruiterSession:
     )
 
 
-def _set_session_cookie(response: Response, recruiter: Recruiter) -> None:
+def _set_session_cookie(
+    response: Response, recruiter: Recruiter, *, max_age: int | None = None
+) -> None:
     response.set_cookie(
         key=settings.session_cookie_name,
         value=create_session_token(recruiter),
-        max_age=settings.session_max_age_seconds,
+        max_age=max_age or settings.session_max_age_seconds,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",
@@ -91,6 +96,25 @@ async def auth_config() -> AuthConfig:
     )
 
 
+async def _start_sandbox_session(response: Response) -> RecruiterSession:
+    try:
+        recruiter = await create_demo_sandbox()
+    except Exception:
+        logger.exception("Unable to create a demo sandbox")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The demo is unavailable right now. Please try again in a moment.",
+        ) from None
+    await recruiter.fetch_related("company")
+    # The sandbox is deleted after its TTL, so the cookie need not outlive it.
+    _set_session_cookie(
+        response,
+        recruiter,
+        max_age=min(settings.session_max_age_seconds, settings.demo_sandbox_ttl_hours * 3600),
+    )
+    return _session_payload(recruiter)
+
+
 @router.post("/login", response_model=RecruiterSession)
 async def login(payload: LoginRequest, request: Request, response: Response) -> RecruiterSession:
     await _enforce_login_rate_limit(request)
@@ -100,6 +124,9 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
+    if recruiter.is_demo:
+        # The shared demo login opens a private sandbox instead of the shared company.
+        return await _start_sandbox_session(response)
     await recruiter.fetch_related("company")
     _set_session_cookie(response, recruiter)
     return _session_payload(recruiter)
@@ -107,16 +134,19 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
 
 @router.post("/demo", response_model=RecruiterSession)
 async def demo_login(request: Request, response: Response) -> RecruiterSession:
-    await _enforce_login_rate_limit(request)
-    recruiter = await demo_recruiter()
-    if recruiter is None:
+    """Open the visitor's private demo workspace, creating one if they have none."""
+
+    if not settings.demo_mode:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="The demo account is not available. Run the seed script to create it.",
+            status_code=status.HTTP_404_NOT_FOUND, detail="The demo is not enabled."
         )
-    await recruiter.fetch_related("company")
-    _set_session_cookie(response, recruiter)
-    return _session_payload(recruiter)
+    current = await recruiter_from_session(request.cookies.get(settings.session_cookie_name))
+    if await is_sandbox_recruiter(current):
+        await current.fetch_related("company")
+        return _session_payload(current)
+
+    await _enforce_login_rate_limit(request)
+    return await _start_sandbox_session(response)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

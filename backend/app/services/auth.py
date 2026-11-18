@@ -29,14 +29,6 @@ async def authenticate(email: str, password: str) -> Recruiter | None:
     return recruiter
 
 
-async def demo_recruiter() -> Recruiter | None:
-    if not settings.demo_mode:
-        return None
-    return await Recruiter.get_or_none(
-        email=settings.demo_recruiter_email.strip().casefold(), is_demo=True
-    )
-
-
 def create_session_token(recruiter: Recruiter) -> str:
     return sign_value(recruiter.id, purpose=SESSION_PURPOSE)
 
@@ -54,7 +46,12 @@ async def recruiter_from_session(token: str | None) -> Recruiter | None:
     except ValueError:
         return None
     recruiter = await Recruiter.get_or_none(id=recruiter_id).select_related("company")
-    if recruiter is None or not recruiter.password_hash:
+    if recruiter is None:
+        return None
+    # An account without a password is disabled, except demo sandbox recruiters, which
+    # never have one and exist only behind the session cookie.
+    is_sandbox = recruiter.is_demo and recruiter.company.is_sandbox
+    if not recruiter.password_hash and not is_sandbox:
         return None
     if recruiter.is_demo and not settings.demo_mode:
         return None

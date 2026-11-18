@@ -334,3 +334,13 @@ def reset_demo_data_task() -> dict[str, Any]:
         "applications": summary.applications,
         "evaluated": summary.evaluated,
     }
+
+
+@celery_app.task(name="talentflow.cleanup_demo_sandboxes")
+def cleanup_demo_sandboxes_task() -> dict[str, Any]:
+    from app.demo.sandbox import cleanup_expired_sandboxes
+
+    if not settings.demo_mode:
+        return {"status": "skipped"}
+    deleted = run_async_db_operation(cleanup_expired_sandboxes)
+    return {"status": "cleaned", "deleted": deleted}

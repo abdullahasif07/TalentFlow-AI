@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     demo_recruiter_email: str = "demo@northstar.example.com"
     demo_recruiter_password: SecretStr = SecretStr("demo-recruiter")
     demo_reset_hour_utc: int = 3
+    # Each "Try the demo" visitor gets a private copy of the demo company (a sandbox).
+    # Sandboxes are deleted this many hours after creation; at most this many exist.
+    demo_sandbox_ttl_hours: int = 24
+    demo_sandbox_max_active: int = 300
 
     # Abuse and cost protection (counters live in Redis).
     redis_url: str = "redis://localhost:6379/2"

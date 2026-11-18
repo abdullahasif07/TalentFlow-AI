@@ -39,5 +39,10 @@ if settings.demo_mode:
         "reset-demo-data": {
             "task": "talentflow.reset_demo_data",
             "schedule": crontab(hour=settings.demo_reset_hour_utc, minute=0),
-        }
+        },
+        # Deletes per-visitor demo sandboxes once they are DEMO_SANDBOX_TTL_HOURS old.
+        "cleanup-demo-sandboxes": {
+            "task": "talentflow.cleanup_demo_sandboxes",
+            "schedule": crontab(minute=15),
+        },
     }
