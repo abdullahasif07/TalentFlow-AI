@@ -19,7 +19,8 @@ The AI supports decisions; people make them.
    application move through *reading resume → matching against the role*. Then find yourself in
    the recruiter view.
 
-All companies, people, and applications in the demo are fictional, and demo data resets nightly.
+All companies, people, and applications in the demo are fictional. Each visitor gets a private
+copy of the demo workspace, deleted after 24 hours, so nobody sees anyone else's changes.
 
 ## Features
 

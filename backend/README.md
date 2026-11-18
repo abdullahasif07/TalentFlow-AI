@@ -79,8 +79,9 @@ virtual environment active:
 celery -A app.worker.celery_app:celery_app worker --loglevel=INFO
 ```
 
-Add `-B` to also run Celery beat, which resets the demo data every night at
-`DEMO_RESET_HOUR_UTC` while `DEMO_MODE=true`.
+Add `-B` to also run Celery beat. While `DEMO_MODE=true` it resets the shared demo company
+every night at `DEMO_RESET_HOUR_UTC` and, every hour, deletes per-visitor demo sandboxes older
+than `DEMO_SANDBOX_TTL_HOURS`.
 
 In another terminal, confirm that the worker responds:
 
@@ -283,7 +284,7 @@ score. Expected comparison errors are returned through the typed `errors` payloa
 - Cookie-based recruiter authentication with company-scoped data access
 - Daily AI budget, per-IP rate limits, honeypot spam protection, and a comparison cache
 - Applicant-facing progress tracking through a signed status token
-- Demo mode with one-click login, seeded data, and a nightly reset
+- Demo mode with one-click login into a private, auto-expiring sandbox copy of the seeded data
 
 ## Example operations
 

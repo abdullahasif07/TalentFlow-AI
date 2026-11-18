@@ -12,7 +12,7 @@ Vercel (free)  ── Next.js frontend
 VPS (~€4–6/month) ── Caddy (HTTPS via <ip>.sslip.io)
                       ├─ api     FastAPI + GraphQL
                       ├─ worker  Celery (AI screening)
-                      ├─ beat    nightly demo reset
+                      ├─ beat    demo cleanup (expired sandboxes)
                       ├─ postgres
                       └─ redis
 ```
